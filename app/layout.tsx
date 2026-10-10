@@ -6,8 +6,8 @@ import axios from 'axios';
 import Provider from './provider';
 
 export const metadata: Metadata = {
-  title: "Next.js Premium Startup Boilerplate",
-  description: "Created using the ultimate interactive Next.js stack generator CLI.",
+  title: "Groovi AI",
+  description: "Groovi AI",
 };
 
 const figTree = Figtree({ subsets: ['latin'] })

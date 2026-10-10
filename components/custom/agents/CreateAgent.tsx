@@ -4,6 +4,7 @@ import axios from 'axios'
 import { ArrowUp, BriefcaseBusiness, Loader2, Loader2Icon, Mail, Plus, Search } from 'lucide-react'
 import React, { useState } from 'react'
 import AIAgentQuestions from './AIAgentQuestions'
+import NewAgentCard from './NewAgentCard'
 
 const quickSuggestions = [
     {
@@ -64,6 +65,32 @@ type AgentConfigResp = {
     config: any
 }
 
+export type AgentSchedule = {
+    type: "once" | "recurring" | "manual" | string
+    frequency?: string
+    time?: string
+}
+
+export type CreatedAgentType = {
+    id: number,
+    userEmail: string,
+    agentId: string,
+    name: string,
+    agentImage: string,
+    description: string,
+    instructions: string,
+    objective: string,
+    tools: any,
+    skills: string[],
+    schedule: AgentSchedule,
+    outputFormat: string,
+    status: string,
+    createdAt: string
+}
+
+export type createdAgentType = CreatedAgentType
+
+
 export type ClarificationQuestion = {
     id: string
     question: string
@@ -79,6 +106,7 @@ function CreateAgent() {
 
     const [prompt, setPrompt] = useState('')
     const [configResult, setConfigResult] = useState<AgentConfigResp | null>(null);
+    const [createdAgent, setCreateadAgent] = useState<CreatedAgentType | null>(null);
     const [loading, setLoading] = useState(false);
 
     const OnSubmit = async () => {
@@ -90,6 +118,15 @@ function CreateAgent() {
 
             console.log(result.data);
             setConfigResult(result.data);
+            if (result.data?.status === 'ready' || result.data?.status_ === 'ready') {
+                const agentData = result.data.dbResult ?? (result.data.config ? {
+                    ...result.data.config,
+                    agentId: result.data.agentId,
+                    agentImage: result.data.agentImage,
+                    status: 'active'
+                } : null);
+                setCreateadAgent(agentData);
+            }
         } catch (error) {
             console.error("Failed to generate agent config:", error);
         } finally {
@@ -109,6 +146,14 @@ function CreateAgent() {
 
             console.log(result.data);
             setConfigResult(result.data);
+            const agentData = result.data.dbResult ?? (result.data.config ? {
+                ...result.data.config,
+                agentId: result.data.agentId,
+                agentImage: result.data.agentImage,
+                status: 'active'
+            } : null);
+            setCreateadAgent(agentData);
+            setLoading(false);
         } catch (error) {
             console.error("Failed to submit clarification answers:", error);
         } finally {
@@ -177,19 +222,19 @@ function CreateAgent() {
 
             {configResult &&
                 <div>
-                    {configResult.status == 'needs_clarification' && (
-                        <AIAgentQuestions
-                            questionList={configResult.clarificationQuestions}
-                            onComplete={onComplete}
-                        />
-                    )}
-                    {configResult.status == 'ready' && (
-                        <div className='p-5 border rounded-2xl mt-5 bg-slate-50'>
-                            <p className='break-all font-mono text-sm'>{JSON.stringify(configResult)}</p>
+                    {configResult.status == 'needs_clarification'
+                        &&
+                        <div className='p-5 border rounded-2xl'>
+                            <AIAgentQuestions
+                                questionList={configResult.clarificationQuestions}
+                                onComplete={onComplete}
+                            />
                         </div>
-                    )}
+                    }
+
                 </div>
             }
+            {createdAgent && <NewAgentCard createdAgent={createdAgent} />}
         </div>
     )
 }
