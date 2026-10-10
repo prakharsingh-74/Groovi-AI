@@ -83,13 +83,18 @@ function CreateAgent() {
 
     const OnSubmit = async () => {
         setLoading(true);
-        const result = await axios.post('/api/agent/configure', {
-            prompt: prompt
-        });
+        try {
+            const result = await axios.post('/api/agent/configure', {
+                prompt: prompt
+            });
 
-        console.log(result.data);
-        setConfigResult(result.data);
-        setLoading(false);
+            console.log(result.data);
+            setConfigResult(result.data);
+        } catch (error) {
+            console.error("Failed to generate agent config:", error);
+        } finally {
+            setLoading(false);
+        }
     }
 
     const onComplete = async (ans: any) => {
@@ -97,13 +102,18 @@ function CreateAgent() {
         setConfigResult(null);
         const updatedPrompt = prompt + "\n" + JSON.stringify(ans);
         setLoading(true);
-        const result = await axios.post('/api/agent/configure', {
-            prompt: updatedPrompt
-        });
+        try {
+            const result = await axios.post('/api/agent/configure', {
+                prompt: updatedPrompt
+            });
 
-        console.log(result.data);
-        setConfigResult(result.data);
-        setLoading(false);
+            console.log(result.data);
+            setConfigResult(result.data);
+        } catch (error) {
+            console.error("Failed to submit clarification answers:", error);
+        } finally {
+            setLoading(false);
+        }
     }
 
     return (

@@ -49,9 +49,9 @@ export default function AIAgentQuestions({
     const progress = ((currentIndex + 1) / questionList.length) * 100
 
     return (
-        <div className='w-full border rounded-2xl p-6 bg-background shadow-sm mt-6'>
+        <div className='w-full max-w-xl mx-auto mt-8'>
             {/* Header / Subtitle */}
-            <div className='mb-6'>
+            <div className='mb-8'>
                 {/* Progress bar info */}
                 <div className='flex justify-between items-center text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2'>
                     <span>Question {currentIndex + 1} of {questionList.length}</span>

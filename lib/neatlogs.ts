@@ -1,4 +1,4 @@
-import { init, wrapGoogleGenAI, trace, span, Span } from "neatlogs";
+import { init, flush, wrapGoogleGenAI, trace, span, Span } from "neatlogs";
 
 let initPromise: Promise<void> | null = null;
 
@@ -13,4 +13,5 @@ export function ensureNeatlogsInit(): Promise<void> {
   return initPromise;
 }
 
-export { wrapGoogleGenAI, trace, span, Span };
+export { wrapGoogleGenAI, trace, span, Span, flush };
+

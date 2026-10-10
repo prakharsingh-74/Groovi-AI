@@ -2,101 +2,69 @@ import { NextRequest, NextResponse } from "next/server";
 import { GoogleGenAI } from '@google/genai';
 import { AgentConfigSystemPrompt } from "@/data/Prompt";
 import { AgentConfigRespSchema } from "@/data/ResponseSchema";
-import { db } from "@/db";
-import { tools } from "@/db/schema";
-import { ensureNeatlogsInit, wrapGoogleGenAI, trace, span } from "@/lib/neatlogs";
+import { ensureNeatlogsInit, wrapGoogleGenAI, trace, flush } from "@/lib/neatlogs";
 
 export async function POST(req: NextRequest) {
-    await ensureNeatlogsInit();
-
     const { prompt } = await req.json();
 
-    if (!prompt.trim()) {
-        return NextResponse.json({ error: "Prompt is required" }, { status: 400 })
+    if (!prompt || !prompt.trim()) {
+        return NextResponse.json({ error: "Prompt is required" }, { status: 400 });
     }
 
     const apiKey = process.env.GOOGLE_CLOUD_GEMINI_API_KEY;
 
-    return await trace(
-        {
-            name: "configure-agent",
-            kind: "WORKFLOW",
-            input: { promptLength: prompt.length },
-        },
-        async () => {
-            try {
-                const getDatabaseTools = span(
-                    {
-                        kind: "RETRIEVER",
-                        name: "get-available-tools",
-                    },
-                    async () => {
-                        return await db.select({
-                            slug: tools.slug
-                        }).from(tools);
-                    }
-                );
+    try {
+        await ensureNeatlogsInit();
+        const ai = wrapGoogleGenAI(new GoogleGenAI({ apiKey }));
 
-                const aiTools = await getDatabaseTools();
+        const result = await trace(
+            {
+                name: "agent-configurator",
+                kind: "AGENT",
+                input: { prompt },
+            },
+            async () => {
+                const promptContent = AgentConfigSystemPrompt.replace('{USER_PROMPT}', prompt);
+                let responseText: string | undefined;
 
-                const ai = wrapGoogleGenAI(new GoogleGenAI({ apiKey }));
-
-                const modelsToTry = ['gemini-2.5-flash', 'gemini-2.0-flash', 'gemini-1.5-flash'];
-                let response = null;
-                let lastError = null;
-
-                for (const modelName of modelsToTry) {
-                    for (let attempt = 1; attempt <= 3; attempt++) {
-                        try {
-                            response = await ai.models.generateContent({
-                                model: modelName,
-                                contents: AgentConfigSystemPrompt.replace('{USER_PROMPT}', prompt) + `\nAvailable database tools: ${JSON.stringify(aiTools)}`,
-                                config: {
-                                    responseMimeType: 'application/json',
-                                    responseSchema: AgentConfigRespSchema
-                                }
-                            });
-                            if (response) break;
-                        } catch (err: any) {
-                            lastError = err;
-                            console.warn(`Attempt ${attempt} on ${modelName} failed: ${err?.message || err}`);
-                            if (attempt < 3) {
-                                await new Promise((res) => setTimeout(res, attempt * 1500));
-                            }
+                try {
+                    // Primary: gemini-2.5-flash with thinking budget (stable & highly available)
+                    const response = await ai.models.generateContent({
+                        model: 'gemini-2.5-flash',
+                        contents: promptContent,
+                        config: {
+                            thinkingConfig: { thinkingBudget: 1024 },
+                            responseMimeType: "application/json",
+                            responseSchema: AgentConfigRespSchema
                         }
-                    }
-                    if (response) break;
+                    });
+                    responseText = response.text;
+                } catch (primaryErr: any) {
+                    console.warn("[gemini-2.5-flash] with thinking failed, trying standard config:", primaryErr?.message || primaryErr);
+                    // Fallback: gemini-2.5-flash without thinkingConfig
+                    const fallbackResponse = await ai.models.generateContent({
+                        model: 'gemini-2.5-flash',
+                        contents: promptContent,
+                        config: {
+                            responseMimeType: "application/json",
+                            responseSchema: AgentConfigRespSchema
+                        }
+                    });
+                    responseText = fallbackResponse.text;
                 }
 
-                if (!response) {
-                    throw lastError || new Error("Failed to generate content after retries");
-                }
-
-                let rawText = response.text ?? '{}';
-                if (rawText.startsWith("```")) {
-                    rawText = rawText.replace(/^```json\s*/, "").replace(/^```\s*/, "").replace(/\s*```$/, "");
-                }
-
-                const parseResponse = span(
-                    {
-                        kind: "TOOL",
-                        name: "parse-agent-config",
-                        toolName: "parse_json_response",
-                    },
-                    async (raw: string) => {
-                        return JSON.parse(raw);
-                    }
-                );
-
-                const data = await parseResponse(rawText);
-
-                return NextResponse.json(data);
-
-            } catch (e: any) {
-                console.error('Error configuring agent:', e);
-                return NextResponse.json({ error: e?.message || "Service temporarily unavailable. Please try again." }, { status: 503 });
+                return JSON.parse(responseText ?? '{}');
             }
-        }
-    );
+        );
+
+        // Immediate flush so traces show up on Neatlogs dashboard right away
+        await flush().catch((err) => console.warn("[neatlogs] flush warning:", err));
+
+        return NextResponse.json(result);
+
+    } catch (e: any) {
+        console.error("Error in agent configure:", e);
+        return NextResponse.json({ error: String(e?.message || e) }, { status: 500 });
+    }
 }
 
