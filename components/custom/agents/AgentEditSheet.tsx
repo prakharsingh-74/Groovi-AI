@@ -1,6 +1,6 @@
 'use client'
 
-import React, { useState, useEffect } from "react"
+import React, { useState, useEffect, useRef, useMemo, useCallback } from "react"
 import {
     Sheet,
     SheetClose,
@@ -10,12 +10,18 @@ import {
     SheetTitle,
     SheetTrigger,
 } from "@/components/ui/sheet"
+import {
+    Popover,
+    PopoverContent,
+    PopoverTrigger,
+} from "@/components/ui/popover"
 import { CreatedAgentType } from "./CreateAgent"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
-import { Shuffle, Plus, X, Loader2 } from "lucide-react"
+import { Shuffle, Plus, X, Loader2, Clock } from "lucide-react"
 import axios from "axios"
+import { toast } from "@/components/ui/toast"
 
 type Props = {
     createdAgent: CreatedAgentType | null
@@ -25,12 +31,35 @@ type Props = {
     onSave?: (updatedAgent: CreatedAgentType) => void
 }
 
+const HOURS = ["01", "02", "03", "04", "05", "06", "07", "08", "09", "10", "11", "12"]
+const MINUTES = Array.from({ length: 60 }, (_, i) => String(i).padStart(2, "0"))
+const PERIODS = ["AM", "PM"] as const
+
+function parseTimeString(timeStr?: string) {
+    if (!timeStr) return { hour: "09", minute: "00", period: "AM" }
+    const match = timeStr.trim().match(/^(\d{1,2}):(\d{2})\s*(AM|PM)?$/i)
+    if (match) {
+        const hour = match[1].padStart(2, "0")
+        const minute = match[2].padStart(2, "0")
+        const period = (match[3] || "AM").toUpperCase()
+        return { hour, minute, period }
+    }
+    return { hour: "09", minute: "00", period: "AM" }
+}
+
+const TOOL_META_CACHE = new Map<string, { slug: string; name: string; icon: React.ReactNode }>()
+
 function getToolMeta(tool: any) {
     const raw = typeof tool === "string" ? tool : tool?.slug || tool?.name || ""
+    if (TOOL_META_CACHE.has(raw)) {
+        return TOOL_META_CACHE.get(raw)!
+    }
+
     const slug = raw.toLowerCase().trim()
+    let meta: { slug: string; name: string; icon: React.ReactNode }
 
     if (slug.includes("calendar")) {
-        return {
+        meta = {
             slug: raw,
             name: "Google Calendar",
             icon: (
@@ -39,9 +68,8 @@ function getToolMeta(tool: any) {
                 </div>
             )
         }
-    }
-    if (slug.includes("github")) {
-        return {
+    } else if (slug.includes("github")) {
+        meta = {
             slug: raw,
             name: "GitHub",
             icon: (
@@ -52,9 +80,8 @@ function getToolMeta(tool: any) {
                 </div>
             )
         }
-    }
-    if (slug.includes("gmail") || slug.includes("mail")) {
-        return {
+    } else if (slug.includes("gmail") || slug.includes("mail")) {
+        meta = {
             slug: raw,
             name: "Gmail",
             icon: (
@@ -63,9 +90,8 @@ function getToolMeta(tool: any) {
                 </div>
             )
         }
-    }
-    if (slug.includes("slack")) {
-        return {
+    } else if (slug.includes("slack")) {
+        meta = {
             slug: raw,
             name: "Slack",
             icon: (
@@ -74,9 +100,8 @@ function getToolMeta(tool: any) {
                 </div>
             )
         }
-    }
-    if (slug.includes("notion")) {
-        return {
+    } else if (slug.includes("notion")) {
+        meta = {
             slug: raw,
             name: "Notion",
             icon: (
@@ -85,22 +110,166 @@ function getToolMeta(tool: any) {
                 </div>
             )
         }
+    } else {
+        const displayName = raw
+            .replace(/[_-]/g, " ")
+            .replace(/\b\w/g, (c: string) => c.toUpperCase())
+
+        meta = {
+            slug: raw,
+            name: displayName || "Tool",
+            icon: (
+                <div className="w-8 h-8 rounded-lg bg-slate-100 border border-slate-200 flex items-center justify-center text-slate-700 font-bold text-xs uppercase shrink-0">
+                    {displayName.charAt(0) || "T"}
+                </div>
+            )
+        }
     }
 
-    const displayName = raw
-        .replace(/[_-]/g, " ")
-        .replace(/\b\w/g, (c: string) => c.toUpperCase())
-
-    return {
-        slug: raw,
-        name: displayName || "Tool",
-        icon: (
-            <div className="w-8 h-8 rounded-lg bg-slate-100 border border-slate-200 flex items-center justify-center text-slate-700 font-bold text-xs uppercase shrink-0">
-                {displayName.charAt(0) || "T"}
-            </div>
-        )
-    }
+    TOOL_META_CACHE.set(raw, meta)
+    return meta
 }
+
+// Memoized Time Picker Panel (avoids re-rendering 74 buttons on every form input stroke)
+const TimePickerPanel = React.memo(function TimePickerPanel({
+    selectedHour,
+    selectedMinute,
+    selectedPeriod,
+    onHourSelect,
+    onMinuteSelect,
+    onPeriodSelect,
+    hourContainerRef,
+    minuteContainerRef,
+}: {
+    selectedHour: string
+    selectedMinute: string
+    selectedPeriod: "AM" | "PM"
+    onHourSelect: (h: string) => void
+    onMinuteSelect: (m: string) => void
+    onPeriodSelect: (p: "AM" | "PM") => void
+    hourContainerRef: React.RefObject<HTMLDivElement | null>
+    minuteContainerRef: React.RefObject<HTMLDivElement | null>
+}) {
+    return (
+        <div className="flex gap-1 bg-white select-none">
+            {/* Hours Column */}
+            <div
+                ref={hourContainerRef}
+                className="flex-1 flex flex-col gap-0.5 max-h-48 overflow-y-auto py-0.5 pr-0.5 scrollbar-thin"
+            >
+                {HOURS.map((h) => {
+                    const isSelected = selectedHour === h
+                    return (
+                        <button
+                            key={h}
+                            type="button"
+                            data-selected={isSelected}
+                            onClick={() => onHourSelect(h)}
+                            className={`py-1.5 px-2 text-xs font-medium rounded-md transition-colors cursor-pointer text-center ${
+                                isSelected
+                                    ? "bg-blue-600 text-white font-semibold shadow-xs"
+                                    : "text-slate-700 hover:bg-slate-100"
+                            }`}
+                        >
+                            {h}
+                        </button>
+                    )
+                })}
+            </div>
+
+            <div className="w-[1px] bg-slate-100 my-1 shrink-0" />
+
+            {/* Minutes Column */}
+            <div
+                ref={minuteContainerRef}
+                className="flex-1 flex flex-col gap-0.5 max-h-48 overflow-y-auto py-0.5 pr-0.5 scrollbar-thin"
+            >
+                {MINUTES.map((m) => {
+                    const isSelected = selectedMinute === m
+                    return (
+                        <button
+                            key={m}
+                            type="button"
+                            data-selected={isSelected}
+                            onClick={() => onMinuteSelect(m)}
+                            className={`py-1.5 px-2 text-xs font-medium rounded-md transition-colors cursor-pointer text-center ${
+                                isSelected
+                                    ? "bg-blue-600 text-white font-semibold shadow-xs"
+                                    : "text-slate-700 hover:bg-blue-100"
+                            }`}
+                        >
+                            {m}
+                        </button>
+                    )
+                })}
+            </div>
+
+            <div className="w-[1px] bg-slate-100 my-1 shrink-0" />
+
+            {/* AM / PM Column */}
+            <div className="flex flex-col gap-1 py-0.5 shrink-0">
+                {PERIODS.map((p) => {
+                    const isSelected = selectedPeriod === p
+                    return (
+                        <button
+                            key={p}
+                            type="button"
+                            onClick={() => onPeriodSelect(p)}
+                            className={`py-1.5 px-2.5 text-xs font-medium rounded-md transition-colors cursor-pointer text-center ${
+                                isSelected
+                                    ? "bg-blue-600 text-white font-semibold shadow-xs"
+                                    : "text-slate-700 hover:bg-slate-100"
+                            }`}
+                        >
+                            {p}
+                        </button>
+                    )
+                })}
+            </div>
+        </div>
+    )
+})
+
+// Memoized Tool Card Component
+const ToolCard = React.memo(function ToolCard({
+    meta,
+    isConnected,
+    onToggle,
+}: {
+    meta: { slug: string; name: string; icon: React.ReactNode }
+    isConnected: boolean
+    onToggle: (slug: string) => void
+}) {
+    return (
+        <div className="rounded-2xl border border-slate-200/90 p-3.5 flex items-center justify-between bg-white">
+            <div className="flex items-center gap-3 min-w-0">
+                {meta.icon}
+                <div className="min-w-0">
+                    <p className="text-xs font-semibold text-slate-900 truncate">
+                        {meta.name}
+                    </p>
+                    <p className={`text-[11px] font-medium mt-0.5 ${
+                        isConnected ? "text-emerald-600" : "text-rose-500"
+                    }`}>
+                        {isConnected ? "Connected" : "Not connected"}
+                    </p>
+                </div>
+            </div>
+
+            <button
+                type="button"
+                onClick={() => onToggle(meta.slug)}
+                className={`text-xs font-medium px-3.5 py-1.5 rounded-lg transition-colors cursor-pointer ${
+                    isConnected
+                        ? "border border-slate-200 hover:bg-slate-100 text-slate-700"
+                        : "bg-slate-900 hover:bg-slate-800 text-white"
+                }`}
+            >
+                {isConnected ? "Disconnect" : "Connect"}
+            </button>
+        </div>
+    )
+})
 
 function AgentEditSheet({ createdAgent, open, onOpenChange, trigger, onSave }: Props) {
     const [name, setName] = useState(createdAgent?.name || "")
@@ -116,6 +285,16 @@ function AgentEditSheet({ createdAgent, open, onOpenChange, trigger, onSave }: P
     const [outputFormat, setOutputFormat] = useState(createdAgent?.outputFormat || "")
     const [isSaving, setIsSaving] = useState(false)
     const [saved, setSaved] = useState(false)
+
+    // Time picker state
+    const [timePickerOpen, setTimePickerOpen] = useState(false)
+    const [selectedHour, setSelectedHour] = useState("09")
+    const [selectedMinute, setSelectedMinute] = useState("00")
+    const [selectedPeriod, setSelectedPeriod] = useState<"AM" | "PM">("AM")
+
+    const hourContainerRef = useRef<HTMLDivElement | null>(null)
+    const minuteContainerRef = useRef<HTMLDivElement | null>(null)
+    const saveTimerRef = useRef<NodeJS.Timeout | null>(null)
 
     // Sync all state whenever createdAgent changes
     useEffect(() => {
@@ -133,6 +312,11 @@ function AgentEditSheet({ createdAgent, open, onOpenChange, trigger, onSave }: P
             setSkills(Array.isArray(createdAgent.skills) ? [...createdAgent.skills] : [])
             setOutputFormat(createdAgent.outputFormat || "")
 
+            const parsedTime = parseTimeString(createdAgent.schedule?.time)
+            setSelectedHour(parsedTime.hour)
+            setSelectedMinute(parsedTime.minute)
+            setSelectedPeriod(parsedTime.period as "AM" | "PM")
+
             const initialConnected: Record<string, boolean> = {}
             if (Array.isArray(createdAgent.tools)) {
                 createdAgent.tools.forEach((t: any) => {
@@ -146,32 +330,83 @@ function AgentEditSheet({ createdAgent, open, onOpenChange, trigger, onSave }: P
         }
     }, [createdAgent])
 
-    const handleShuffleImage = () => {
+    // Clean up timer on unmount
+    useEffect(() => {
+        return () => {
+            if (saveTimerRef.current) clearTimeout(saveTimerRef.current)
+        }
+    }, [])
+
+    // Auto-scroll selected hour & minute into view when popover opens (with timer cleanup)
+    useEffect(() => {
+        if (timePickerOpen) {
+            const timer = setTimeout(() => {
+                const selectedHourEl = hourContainerRef.current?.querySelector('[data-selected="true"]')
+                selectedHourEl?.scrollIntoView({ block: "center", behavior: "smooth" })
+
+                const selectedMinuteEl = minuteContainerRef.current?.querySelector('[data-selected="true"]')
+                selectedMinuteEl?.scrollIntoView({ block: "center", behavior: "smooth" })
+            }, 50)
+            return () => clearTimeout(timer)
+        }
+    }, [timePickerOpen])
+
+    const handleHourSelect = useCallback((h: string) => {
+        setSelectedHour(h)
+        setScheduleTime(`${h}:${selectedMinute} ${selectedPeriod}`)
+    }, [selectedMinute, selectedPeriod])
+
+    const handleMinuteSelect = useCallback((m: string) => {
+        setSelectedMinute(m)
+        setScheduleTime(`${selectedHour}:${m} ${selectedPeriod}`)
+    }, [selectedHour, selectedPeriod])
+
+    const handlePeriodSelect = useCallback((p: "AM" | "PM") => {
+        setSelectedPeriod(p)
+        setScheduleTime(`${selectedHour}:${selectedMinute} ${p}`)
+    }, [selectedHour, selectedMinute])
+
+    const handleShuffleImage = useCallback(() => {
         const randomSeed = Math.random().toString(36).substring(2, 9)
         const newUrl = `https://api.dicebear.com/10.x/bottts-neutral/svg?seed=${randomSeed}`
         setAgentImage(newUrl)
-    }
+    }, [])
 
-    const addSkill = () => {
-        const trimmed = newSkill.trim()
-        if (trimmed && !skills.includes(trimmed)) {
-            setSkills([...skills, trimmed])
-            setNewSkill("")
-        }
-    }
+    const addSkill = useCallback(() => {
+        setNewSkill((prev) => {
+            const trimmed = prev.trim()
+            if (trimmed) {
+                setSkills((s) => s.includes(trimmed) ? s : [...s, trimmed])
+            }
+            return ""
+        })
+    }, [])
 
-    const removeSkill = (index: number) => {
-        setSkills(skills.filter((_, i) => i !== index))
-    }
+    const removeSkill = useCallback((index: number) => {
+        setSkills((prev) => prev.filter((_, i) => i !== index))
+    }, [])
 
-    const toggleToolConnection = (slug: string) => {
-        setConnectedTools(prev => ({
+    const toggleToolConnection = useCallback((slug: string) => {
+        setConnectedTools((prev) => ({
             ...prev,
             [slug]: !prev[slug]
         }))
-    }
+    }, [])
 
-    const handleSave = async () => {
+    // Memoize tools array and processed tool items
+    const toolsList = useMemo(() => {
+        return Array.isArray(createdAgent?.tools) ? createdAgent.tools : []
+    }, [createdAgent?.tools])
+
+    const toolItems = useMemo(() => {
+        return toolsList.map((t: any) => getToolMeta(t))
+    }, [toolsList])
+
+    const connectedCount = useMemo(() => {
+        return toolItems.filter((meta) => Boolean(connectedTools[meta.slug])).length
+    }, [toolItems, connectedTools])
+
+    const handleSave = useCallback(async () => {
         setIsSaving(true)
         try {
             const updatedSchedule = {
@@ -180,8 +415,7 @@ function AgentEditSheet({ createdAgent, open, onOpenChange, trigger, onSave }: P
                 time: scheduleTime,
             }
 
-            const rawTools = Array.isArray(createdAgent?.tools) ? createdAgent.tools : []
-            const updatedTools = rawTools.map((t: any) => {
+            const updatedTools = toolsList.map((t: any) => {
                 const slug = typeof t === "string" ? t : t?.slug || t?.name || ""
                 return typeof t === "string"
                     ? slug
@@ -217,30 +451,49 @@ function AgentEditSheet({ createdAgent, open, onOpenChange, trigger, onSave }: P
 
             onSave?.(updatedAgent)
             setSaved(true)
-            setTimeout(() => {
+
+            toast.add({
+                title: "Agent updated successfully",
+                type: "success"
+            })
+
+            saveTimerRef.current = setTimeout(() => {
                 setSaved(false)
                 onOpenChange?.(false)
             }, 1000)
-        } catch (err) {
+        } catch (err: any) {
             console.error("Failed to save agent updates:", err)
+            toast.add({
+                title: "Failed to save agent",
+                description: String(err?.response?.data?.error || err?.message || "An error occurred while saving."),
+                type: "error"
+            })
         } finally {
             setIsSaving(false)
         }
-    }
+    }, [
+        createdAgent,
+        name,
+        agentImage,
+        objective,
+        instructions,
+        skills,
+        scheduleType,
+        scheduleFreq,
+        scheduleTime,
+        toolsList,
+        connectedTools,
+        outputFormat,
+        onSave,
+        onOpenChange
+    ])
 
-    // Tools list
-    const toolsList = Array.isArray(createdAgent?.tools)
-        ? createdAgent.tools
-        : []
-
-    const connectedCount = toolsList.filter((t: any) => {
-        const slug = typeof t === "string" ? t : t?.slug || t?.name || ""
-        return Boolean(connectedTools[slug])
-    }).length
-
-    const sheetProps: Record<string, any> = {}
-    if (open !== undefined) sheetProps.open = open
-    if (onOpenChange !== undefined) sheetProps.onOpenChange = onOpenChange
+    const sheetProps = useMemo(() => {
+        const props: Record<string, any> = {}
+        if (open !== undefined) props.open = open
+        if (onOpenChange !== undefined) props.onOpenChange = onOpenChange
+        return props
+    }, [open, onOpenChange])
 
     return (
         <Sheet {...sheetProps}>
@@ -375,14 +628,37 @@ function AgentEditSheet({ createdAgent, open, onOpenChange, trigger, onSave }: P
                                 </select>
                             </div>
 
-                            <div className="space-y-1.5">
+                            {/* Interactive Time Picker Popover */}
+                            <div className="space-y-1.5 relative">
                                 <label className="text-xs font-semibold text-slate-700">Time</label>
-                                <Input
-                                    value={scheduleTime}
-                                    onChange={(e) => setScheduleTime(e.target.value)}
-                                    placeholder="--:-- --"
-                                    className="h-9 text-xs rounded-lg"
-                                />
+                                <Popover open={timePickerOpen} onOpenChange={setTimePickerOpen}>
+                                    <PopoverTrigger
+                                        type="button"
+                                        className="flex items-center justify-between h-9 w-full rounded-lg border border-slate-200 bg-white px-3 text-xs font-medium text-slate-800 outline-none hover:border-slate-300 focus:border-purple-500 cursor-pointer text-left transition-colors"
+                                    >
+                                        <span className={scheduleTime && scheduleTime !== "--:-- --" ? "text-slate-900" : "text-slate-400 font-normal"}>
+                                            {scheduleTime || "--:-- --"}
+                                        </span>
+                                        <Clock className="w-3.5 h-3.5 text-slate-500 shrink-0 ml-1.5" />
+                                    </PopoverTrigger>
+                                    <PopoverContent
+                                        align="end"
+                                        side="bottom"
+                                        sideOffset={4}
+                                        className="z-60 w-[190px] p-1.5 bg-white border border-slate-200 shadow-2xl rounded-xl ring-1 ring-slate-900/5 focus:outline-none"
+                                    >
+                                        <TimePickerPanel
+                                            selectedHour={selectedHour}
+                                            selectedMinute={selectedMinute}
+                                            selectedPeriod={selectedPeriod}
+                                            onHourSelect={handleHourSelect}
+                                            onMinuteSelect={handleMinuteSelect}
+                                            onPeriodSelect={handlePeriodSelect}
+                                            hourContainerRef={hourContainerRef}
+                                            minuteContainerRef={minuteContainerRef}
+                                        />
+                                    </PopoverContent>
+                                </Popover>
                             </div>
                         </div>
 
@@ -461,49 +737,20 @@ function AgentEditSheet({ createdAgent, open, onOpenChange, trigger, onSave }: P
                         <div>
                             <h4 className="font-semibold text-sm text-slate-900">Connected Tools</h4>
                             <p className="text-xs text-slate-500 mt-0.5">
-                                {connectedCount} of {toolsList.length} connected
+                                {connectedCount} of {toolItems.length} connected
                             </p>
                         </div>
 
-                        {toolsList.length > 0 ? (
+                        {toolItems.length > 0 ? (
                             <div className="space-y-2">
-                                {toolsList.map((tool: any, idx: number) => {
-                                    const meta = getToolMeta(tool)
-                                    const isConnected = Boolean(connectedTools[meta.slug])
-
-                                    return (
-                                        <div
-                                            key={idx}
-                                            className="rounded-2xl border border-slate-200/90 p-3.5 flex items-center justify-between bg-white"
-                                        >
-                                            <div className="flex items-center gap-3 min-w-0">
-                                                {meta.icon}
-                                                <div className="min-w-0">
-                                                    <p className="text-xs font-semibold text-slate-900 truncate">
-                                                        {meta.name}
-                                                    </p>
-                                                    <p className={`text-[11px] font-medium mt-0.5 ${
-                                                        isConnected ? "text-emerald-600" : "text-rose-500"
-                                                    }`}>
-                                                        {isConnected ? "Connected" : "Not connected"}
-                                                    </p>
-                                                </div>
-                                            </div>
-
-                                            <button
-                                                type="button"
-                                                onClick={() => toggleToolConnection(meta.slug)}
-                                                className={`text-xs font-medium px-3.5 py-1.5 rounded-lg transition-colors cursor-pointer ${
-                                                    isConnected
-                                                        ? "border border-slate-200 hover:bg-slate-100 text-slate-700"
-                                                        : "bg-slate-900 hover:bg-slate-800 text-white"
-                                                }`}
-                                            >
-                                                {isConnected ? "Disconnect" : "Connect"}
-                                            </button>
-                                        </div>
-                                    )
-                                })}
+                                {toolItems.map((meta) => (
+                                    <ToolCard
+                                        key={meta.slug}
+                                        meta={meta}
+                                        isConnected={Boolean(connectedTools[meta.slug])}
+                                        onToggle={toggleToolConnection}
+                                    />
+                                ))}
                             </div>
                         ) : (
                             <div className="p-4 text-center border border-dashed rounded-2xl text-xs text-slate-400">
@@ -553,4 +800,4 @@ function AgentEditSheet({ createdAgent, open, onOpenChange, trigger, onSave }: P
     )
 }
 
-export default AgentEditSheet
+export default AgentEditSheet;

@@ -90,7 +90,7 @@ function NewAgentCard({ createdAgent, onUpdate }: Props) {
                     </div>
                 </div>
 
-                {/* Right Section: Action Controls (Pencil, Open, Ellipsis) */}
+                {/* Right Section: Action Controls (Pencil, Ellipsis) */}
                 <div className="flex items-center gap-1 shrink-0">
                     {/* Pencil Edit Icon Button */}
                     <button
@@ -100,15 +100,6 @@ function NewAgentCard({ createdAgent, onUpdate }: Props) {
                         title="Edit Agent"
                     >
                         <Pencil className="w-4 h-4" />
-                    </button>
-
-                    {/* Open Trigger -> opens AgentEditSheet */}
-                    <button
-                        type="button"
-                        onClick={() => setSheetOpen(true)}
-                        className="h-8 px-2.5 inline-flex items-center justify-center text-sm font-medium text-slate-700 hover:text-slate-900 rounded-lg hover:bg-slate-100 transition-colors cursor-pointer outline-none"
-                    >
-                        Open
                     </button>
 
                     {/* Dropdown Menu */}
