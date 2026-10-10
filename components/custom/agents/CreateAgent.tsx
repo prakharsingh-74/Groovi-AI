@@ -60,7 +60,7 @@ const templates = [
 
 type AgentConfigResp = {
     status: "needs_clarification" | "ready"
-    clarificationQuestions: clarificationQuestion,
+    clarificationQuestions: ClarificationQuestion[],
     config: any
 }
 
