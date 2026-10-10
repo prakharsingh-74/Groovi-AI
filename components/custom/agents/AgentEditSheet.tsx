@@ -434,22 +434,13 @@ function AgentEditSheet({ createdAgent, open, onOpenChange, trigger, onSave }: P
                 outputFormat,
             }
 
-            if (createdAgent?.agentId) {
-                await axios.post('/api/agent/update', {
-                    agentId: createdAgent.agentId,
-                    name,
-                    agentImage,
-                    objective,
-                    instructions,
-                    skills,
-                    schedule: updatedSchedule,
-                    tools: updatedTools,
-                    outputFormat,
-                    status: createdAgent.status || 'active'
-                })
-            }
+            // Update to DB via PUT /api/agent/configure
+            const result = await axios.put('/api/agent/configure', {
+                ...updatedAgent
+            })
 
-            onSave?.(updatedAgent)
+            const savedAgent = result.data || updatedAgent
+            onSave?.(savedAgent)
             setSaved(true)
 
             toast.add({

@@ -5,6 +5,7 @@ import { AgentConfigRespSchema } from "@/data/ResponseSchema";
 import { ensureNeatlogsInit, wrapGoogleGenAI, trace, flush } from "@/lib/neatlogs";
 import { AgentConfig, db, tools } from "@/db";
 import { currentUser } from "@clerk/nextjs/server";
+import { eq } from "drizzle-orm";
 
 export async function POST(req: NextRequest) {
     const { prompt } = await req.json();
@@ -100,6 +101,32 @@ export async function POST(req: NextRequest) {
 
     } catch (e: any) {
         console.error("Error in agent configure:", e);
+        return NextResponse.json({ error: String(e?.message || e) }, { status: 500 });
+    }
+}
+
+export async function PUT(req: NextRequest) {
+    try {
+        const body = await req.json();
+        const agentConfig = body.data?.draftAgent || body.draftAgent || body;
+
+        const condition = agentConfig.agentId
+            ? eq(AgentConfig.agentId, agentConfig.agentId)
+            : agentConfig.id
+                ? eq(AgentConfig.id, agentConfig.id)
+                : undefined;
+
+        const updateOp = db.update(AgentConfig).set({
+            ...agentConfig
+        });
+
+        const result = await (condition ? updateOp.where(condition) : updateOp).returning();
+
+        console.log(result[0]);
+
+        return NextResponse.json(result[0]);
+    } catch (e: any) {
+        console.error("Error in agent configure PUT:", e);
         return NextResponse.json({ error: String(e?.message || e) }, { status: 500 });
     }
 }
