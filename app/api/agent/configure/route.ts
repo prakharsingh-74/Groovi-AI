@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { GoogleGenAI } from '@google/genai';
+import OpenAI from "openai";
 import { AgentConfigSystemPrompt } from "@/data/Prompt";
 import { AgentConfigRespSchema } from "@/data/ResponseSchema";
 import { ensureNeatlogsInit, wrapGoogleGenAI, trace, flush } from "@/lib/neatlogs";
@@ -48,7 +49,8 @@ export async function POST(req: NextRequest) {
                     .replace('{AVAILABLE_TOOLS}', toolsList);
                 let responseText: string | undefined;
 
-                const candidateModels = ['gemini-3.8-flash', 'gemini-3.5-flash', 'gemini-3.7-flash'];
+                // Healthy Gemini models first (gemini-3.8-flash has a 20 req/day quota limit)
+                const candidateModels = ['gemini-3.5-flash', 'gemini-3.5-flash-lite', 'gemini-3.8-flash', 'gemini-3.7-flash'];
                 let lastError: any = null;
 
                 for (const model of candidateModels) {
@@ -71,13 +73,39 @@ export async function POST(req: NextRequest) {
                     }
                 }
 
+                // If Gemini models hit 503 high demand or quota limits, fallback to Groq
+                if (!responseText && process.env.GROQ_API_KEY) {
+                    try {
+                        console.log("[agent-configure] Gemini models unavailable, falling back to Groq...");
+                        const groq = new OpenAI({
+                            apiKey: process.env.GROQ_API_KEY,
+                            baseURL: "https://api.groq.com/openai/v1",
+                            maxRetries: 0
+                        });
+                        const groqRes = await groq.chat.completions.create({
+                            model: process.env.GROQ_MODEL || "openai/gpt-oss-120b",
+                            messages: [
+                                { role: "system", content: "You are an AI that configures agents. Return only a valid JSON response adhering strictly to the requested format with status: ready and config object containing name, description, instructions, objective, tools, skills, and outputFormat." },
+                                { role: "user", content: promptContent }
+                            ],
+                            response_format: { type: "json_object" }
+                        });
+                        if (groqRes.choices[0]?.message?.content) {
+                            responseText = groqRes.choices[0].message.content;
+                        }
+                    } catch (groqErr: any) {
+                        console.warn("[agent-configure] Groq fallback failed:", groqErr?.message || groqErr);
+                    }
+                }
+
                 if (!responseText) {
-                    throw lastError || new Error("All candidate Gemini models failed to generate response");
+                    throw lastError || new Error("All candidate AI models failed to generate response. Please try again in a few moments.");
                 }
 
                 return JSON.parse(responseText ?? '{}');
             }
         );
+
 
         // Immediate flush so traces show up on Neatlogs dashboard right away
         await flush().catch((err) => console.warn("[neatlogs] flush warning:", err));
@@ -114,22 +142,32 @@ export async function POST(req: NextRequest) {
 export async function PUT(req: NextRequest) {
     try {
         const body = await req.json();
-        const agentConfig = body.data?.draftAgent || body.draftAgent || body;
+        const rawAgent = body.data?.draftAgent || body.draftAgent || body;
 
-        const condition = agentConfig.agentId
-            ? eq(AgentConfig.agentId, agentConfig.agentId)
-            : agentConfig.id
-                ? eq(AgentConfig.id, agentConfig.id)
-                : undefined;
+        const agentId = rawAgent.agentId;
+        const id = rawAgent.id;
 
-        const updateOp = db.update(AgentConfig).set({
-            ...agentConfig
-        });
+        if (!agentId && !id) {
+            return NextResponse.json({ error: "agentId or id is required for update" }, { status: 400 });
+        }
 
-        const result = await (condition ? updateOp.where(condition) : updateOp).returning();
+        // Exclude primary key id and immutable createdAt timestamp string
+        const { id: _id, createdAt: _createdAt, ...updateData } = rawAgent;
 
-        console.log(result[0]);
+        const condition = agentId
+            ? eq(AgentConfig.agentId, agentId)
+            : eq(AgentConfig.id, Number(id));
 
+        const result = await db.update(AgentConfig)
+            .set(updateData)
+            .where(condition)
+            .returning();
+
+        if (!result || result.length === 0) {
+            return NextResponse.json({ error: "Agent not found" }, { status: 404 });
+        }
+
+        console.log("Agent updated successfully:", result[0]?.name);
         return NextResponse.json(result[0]);
     } catch (e: any) {
         console.error("Error in agent configure PUT:", e);

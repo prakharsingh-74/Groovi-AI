@@ -8,14 +8,13 @@ import {
     SheetDescription,
 } from "@/components/ui/sheet"
 import { CreatedAgentType } from './CreateAgent'
-import { Sparkles, X, Paperclip, ArrowUp, Loader2 } from 'lucide-react'
+import { Sparkles, X, Paperclip, ArrowUp, Loader2, RotateCcw } from 'lucide-react'
 import axios from 'axios'
 
-type Message = {
+type ChatMessage = {
     id: string
-    sender: 'agent' | 'user'
-    text: string
-    createdAt: Date
+    role: 'agent' | 'user'
+    content: string
 }
 
 type Props = {
@@ -29,27 +28,77 @@ export default function AgentChatDrawer({
     open,
     onOpenChange,
 }: Props) {
-    const [messages, setMessages] = useState<Message[]>([])
-    const [inputText, setInputText] = useState('')
-    const [isLoading, setIsLoading] = useState(false)
+    const [messages, setMessages] = useState<ChatMessage[]>([])
+    const [prompt, setPrompt] = useState('')
+    const [isAgentReplying, setIsAgentReplying] = useState(false)
     const messagesEndRef = useRef<HTMLDivElement | null>(null)
     const textareaRef = useRef<HTMLTextAreaElement | null>(null)
 
-    // Reset and initialize default message when a new agent is opened
+    const storageKey = agent?.agentId ? `agent_chat_${agent.agentId}` : null
+
+    // Load saved messages from localStorage or initialize with welcome message
     useEffect(() => {
-        if (agent && open) {
-            setMessages([
-                {
-                    id: 'init-msg',
-                    sender: 'agent',
-                    text: `Hi! I'm ${agent.name}.\nWhat would you like me to work on?`,
-                    createdAt: new Date(),
-                },
-            ])
-            setInputText('')
-            setIsLoading(false)
+        if (!agent || !open) return
+
+        if (typeof window !== 'undefined' && storageKey) {
+            try {
+                const saved = localStorage.getItem(storageKey)
+                if (saved) {
+                    const parsed = JSON.parse(saved)
+                    if (Array.isArray(parsed) && parsed.length > 0) {
+                        setMessages(parsed)
+                        setPrompt('')
+                        setIsAgentReplying(false)
+                        return
+                    }
+                }
+            } catch (err) {
+                console.error("Failed to load chat from localStorage:", err)
+            }
         }
-    }, [agent?.agentId, open])
+
+        // Default initial message when no saved chat exists
+        setMessages([
+            {
+                id: 'init-msg',
+                role: 'agent',
+                content: `Hi! I'm ${agent.name}.\nWhat would you like me to work on?`,
+            },
+        ])
+        setPrompt('')
+        setIsAgentReplying(false)
+    }, [agent?.agentId, open, storageKey])
+
+    // Automatically persist chat messages whenever they change
+    useEffect(() => {
+        if (!agent || !storageKey || typeof window === 'undefined') return
+        if (messages.length === 0) return
+
+        try {
+            localStorage.setItem(storageKey, JSON.stringify(messages))
+        } catch (err) {
+            console.error("Failed to save chat to localStorage:", err)
+        }
+    }, [messages, storageKey, agent])
+
+    // Clear chat history for this agent
+    const clearChat = () => {
+        if (!agent) return
+        if (storageKey && typeof window !== 'undefined') {
+            try {
+                localStorage.removeItem(storageKey)
+            } catch (err) {
+                console.error("Failed to clear chat storage:", err)
+            }
+        }
+        setMessages([
+            {
+                id: 'init-msg',
+                role: 'agent',
+                content: `Hi! I'm ${agent.name}.\nWhat would you like me to work on?`,
+            },
+        ])
+    }
 
     // Auto-scroll to bottom of chat
     const scrollToBottom = () => {
@@ -58,7 +107,8 @@ export default function AgentChatDrawer({
 
     useEffect(() => {
         scrollToBottom()
-    }, [messages, isLoading])
+    }, [messages, isAgentReplying])
+
 
     // Focus textarea on open
     useEffect(() => {
@@ -71,61 +121,55 @@ export default function AgentChatDrawer({
 
     if (!agent) return null
 
-    const handleSendMessage = async () => {
-        const text = inputText.trim()
-        if (!text || isLoading) return
+    const sendMessage = async () => {
+        const text = prompt.trim()
+        if (!text || isAgentReplying) return
 
-        const userMsg: Message = {
-            id: `user-${Date.now()}`,
-            sender: 'user',
-            text,
-            createdAt: new Date(),
+        const userMessage: ChatMessage = {
+            id: typeof crypto.randomUUID === 'function' ? crypto.randomUUID() : `user-${Date.now()}`,
+            role: 'user',
+            content: text,
         }
 
-        setMessages((prev) => [...prev, userMsg])
-        setInputText('')
-        setIsLoading(true)
+        setMessages((prev) => [...prev, userMessage])
+        setPrompt('')
+        setIsAgentReplying(true)
 
         try {
-            const res = await axios.post('/api/agent/chat', {
-                message: text,
-                agent,
-                history: messages.map((m) => ({
-                    role: m.sender === 'user' ? 'user' : 'model',
-                    text: m.text,
-                })),
+            // Agent API call matching tutorial
+            const result = await axios.post('/api/agent/run', {
+                agentConfig: agent,
+                agentId: agent?.agentId,
+                input: text,
             })
 
-            const agentReplyText =
-                res?.data?.response ||
-                `I have processed your request for "${text}". I will proceed according to my configured skills and instructions.`
+            console.log(result.data?.finalOutput);
 
-            const agentMsg: Message = {
-                id: `agent-${Date.now()}`,
-                sender: 'agent',
-                text: agentReplyText,
-                createdAt: new Date(),
+            const agentMessage: ChatMessage = {
+                id: crypto.randomUUID(),
+                role: "agent",
+                content: result.data?.finalOutput || (typeof result.data === "string" ? result.data : `I completed your request: "${text}".`),
             }
 
-            setMessages((prev) => [...prev, agentMsg])
-        } catch (error) {
-            console.error('Chat error:', error)
-            const errorMsg: Message = {
-                id: `err-${Date.now()}`,
-                sender: 'agent',
-                text: `I've started working on your task: "${text}". I will analyze the required steps and notify you once ready.`,
-                createdAt: new Date(),
+            setMessages((prev) => [...prev, agentMessage])
+        } catch (error: any) {
+            console.error("Agent chat error:", error)
+            const errorMsg = error?.response?.data?.error || error?.message || "Failed to process request. Please try again."
+            const agentMessage: ChatMessage = {
+                id: typeof crypto.randomUUID === 'function' ? crypto.randomUUID() : `agent-${Date.now()}`,
+                role: 'agent',
+                content: `⚠️ ${errorMsg}`,
             }
-            setMessages((prev) => [...prev, errorMsg])
+            setMessages((prev) => [...prev, agentMessage])
         } finally {
-            setIsLoading(false)
+            setIsAgentReplying(false)
         }
     }
 
     const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
         if (e.key === 'Enter' && !e.shiftKey) {
             e.preventDefault()
-            handleSendMessage()
+            sendMessage()
         }
     }
 
@@ -138,7 +182,7 @@ export default function AgentChatDrawer({
             >
                 <SheetTitle className="sr-only">Chat with {agent.name}</SheetTitle>
                 <SheetDescription className="sr-only">
-                    Chat with your agent and assign tasks.
+                    Chat with your agent and give it a task.
                 </SheetDescription>
 
                 {/* Top Header */}
@@ -171,14 +215,28 @@ export default function AgentChatDrawer({
                         </div>
                     </div>
 
-                    {/* Close Button */}
-                    <button
-                        onClick={() => onOpenChange(false)}
-                        className="text-slate-400 hover:text-slate-700 p-1.5 rounded-lg hover:bg-slate-100 transition-colors cursor-pointer shrink-0 ml-2"
-                        aria-label="Close chat"
-                    >
-                        <X className="w-5 h-5" />
-                    </button>
+                    <div className="flex items-center gap-1 shrink-0 ml-2">
+                        {/* Clear/Reset Chat Button */}
+                        {messages.length > 1 && (
+                            <button
+                                onClick={clearChat}
+                                className="text-slate-400 hover:text-slate-600 p-1.5 rounded-lg hover:bg-slate-100 transition-colors cursor-pointer"
+                                title="Reset chat"
+                                aria-label="Reset chat"
+                            >
+                                <RotateCcw className="w-4 h-4" />
+                            </button>
+                        )}
+
+                        {/* Close Button */}
+                        <button
+                            onClick={() => onOpenChange(false)}
+                            className="text-slate-400 hover:text-slate-700 p-1.5 rounded-lg hover:bg-slate-100 transition-colors cursor-pointer"
+                            aria-label="Close chat"
+                        >
+                            <X className="w-5 h-5" />
+                        </button>
+                    </div>
                 </div>
 
                 {/* Main Scrollable Chat Area */}
@@ -202,7 +260,7 @@ export default function AgentChatDrawer({
                         {/* Message Threads */}
                         <div className="space-y-4 mt-auto pt-4">
                             {messages.map((msg) => {
-                                const isUser = msg.sender === 'user'
+                                const isUser = msg.role === 'user'
 
                                 if (isUser) {
                                     return (
@@ -211,7 +269,7 @@ export default function AgentChatDrawer({
                                             className="flex items-start justify-end gap-2.5"
                                         >
                                             <div className="bg-purple-600 text-white rounded-2xl rounded-tr-xs px-4 py-2.5 text-xs md:text-sm shadow-xs max-w-[85%] leading-relaxed break-words">
-                                                {msg.text}
+                                                {msg.content}
                                             </div>
                                         </div>
                                     )
@@ -240,14 +298,14 @@ export default function AgentChatDrawer({
 
                                         {/* Agent Message Bubble */}
                                         <div className="bg-white border border-slate-200/90 rounded-2xl rounded-tl-xs px-4 py-3 text-xs md:text-sm text-slate-800 shadow-2xs max-w-[85%] leading-relaxed whitespace-pre-wrap break-words">
-                                            {msg.text}
+                                            {msg.content}
                                         </div>
                                     </div>
                                 )
                             })}
 
                             {/* Loading / Typing Indicator */}
-                            {isLoading && (
+                            {isAgentReplying && (
                                 <div className="flex items-start gap-2.5">
                                     <div className="w-7 h-7 rounded-full bg-[#bfdbfe] flex items-center justify-center shrink-0 mt-0.5 shadow-2xs border border-blue-100">
                                         <div className="flex items-center gap-0.5">
@@ -272,8 +330,8 @@ export default function AgentChatDrawer({
                     <div className="border border-slate-200 rounded-2xl p-3 bg-white focus-within:border-purple-300 focus-within:ring-2 focus-within:ring-purple-50 shadow-xs transition-all flex flex-col justify-between min-h-[96px]">
                         <textarea
                             ref={textareaRef}
-                            value={inputText}
-                            onChange={(e) => setInputText(e.target.value)}
+                            value={prompt}
+                            onChange={(e) => setPrompt(e.target.value)}
                             onKeyDown={handleKeyDown}
                             placeholder={`Message ${agent.name}...`}
                             rows={2}
@@ -289,8 +347,8 @@ export default function AgentChatDrawer({
                             </button>
                             <button
                                 type="button"
-                                onClick={handleSendMessage}
-                                disabled={!inputText.trim() || isLoading}
+                                onClick={sendMessage}
+                                disabled={!prompt.trim() || isAgentReplying}
                                 className="w-8 h-8 rounded-full bg-[#a855f7] hover:bg-[#9333ea] disabled:bg-purple-300 text-white flex items-center justify-center cursor-pointer shadow-xs transition-all active:scale-95 disabled:cursor-not-allowed"
                                 title="Send message"
                             >
