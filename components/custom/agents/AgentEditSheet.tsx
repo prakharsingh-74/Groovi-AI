@@ -19,7 +19,13 @@ import { CreatedAgentType } from "./CreateAgent"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
-import { Shuffle, Plus, X, Loader2, Loader2 as Loader2Icon, Clock, Link2, Unlink } from "lucide-react"
+import {
+    DropdownMenu,
+    DropdownMenuContent,
+    DropdownMenuItem,
+    DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu"
+import { Shuffle, Plus, X, Loader2, Loader2 as Loader2Icon, Clock, Link2, Unlink, Trash2 } from "lucide-react"
 import axios from "axios"
 import { toast } from "@/components/ui/toast"
 import Image from "next/image"
@@ -122,6 +128,70 @@ function getToolMeta(tool: any) {
             icon: (
                 <div className="w-8 h-8 rounded-lg bg-slate-800 flex items-center justify-center text-white font-serif font-bold text-xs shrink-0 shadow-xs">
                     N
+                </div>
+            )
+        }
+    } else if (slug.includes("sheet")) {
+        meta = {
+            slug: raw,
+            name: "Google Sheets",
+            icon: (
+                <div className="w-8 h-8 rounded-lg bg-emerald-600 flex items-center justify-center text-white font-bold text-xs shrink-0 shadow-xs">
+                    <svg className="w-4 h-4 fill-current" viewBox="0 0 24 24">
+                        <path d="M19 3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm-7 14H6v-2h6v2zm0-4H6v-2h6v2zm0-4H6V7h6v2zm6 8h-4v-2h4v2zm0-4h-4v-2h4v2zm0-4h-4V7h4v2z"/>
+                    </svg>
+                </div>
+            )
+        }
+    } else if (slug.includes("supabase")) {
+        meta = {
+            slug: raw,
+            name: "Supabase",
+            icon: (
+                <div className="w-8 h-8 rounded-lg bg-slate-900 flex items-center justify-center text-emerald-400 font-bold text-xs shrink-0 shadow-xs">
+                    <svg className="w-4 h-4 fill-current" viewBox="0 0 24 24">
+                        <path d="M21.362 9.354H12V.396a.396.396 0 00-.716-.233L.416 13.916a.396.396 0 00.31.637H12v8.958a.396.396 0 00.716.233l10.868-13.753a.396.396 0 00-.222-.637z"/>
+                    </svg>
+                </div>
+            )
+        }
+    } else if (slug.includes("outlook")) {
+        meta = {
+            slug: raw,
+            name: "Outlook",
+            icon: (
+                <div className="w-8 h-8 rounded-lg bg-blue-600 flex items-center justify-center text-white font-bold text-xs shrink-0 shadow-xs">
+                    O
+                </div>
+            )
+        }
+    } else if (slug.includes("browserbase")) {
+        meta = {
+            slug: raw,
+            name: "Browserbase",
+            icon: (
+                <div className="w-8 h-8 rounded-lg bg-[#FF5C00] flex items-center justify-center text-white font-bold text-xs shrink-0 shadow-xs">
+                    B
+                </div>
+            )
+        }
+    } else if (slug.includes("serp")) {
+        meta = {
+            slug: raw,
+            name: "SerpApi",
+            icon: (
+                <div className="w-8 h-8 rounded-lg bg-indigo-600 flex items-center justify-center text-white font-bold text-xs shrink-0 shadow-xs">
+                    S
+                </div>
+            )
+        }
+    } else if (slug.includes("web_search") || slug.includes("search")) {
+        meta = {
+            slug: raw,
+            name: "Web Search",
+            icon: (
+                <div className="w-8 h-8 rounded-lg bg-sky-500 flex items-center justify-center text-white font-bold text-xs shrink-0 shadow-xs">
+                    🔍
                 </div>
             )
         }
@@ -322,6 +392,7 @@ function AgentEditSheet({
     const [skillInput, setSkillInput] = useState("")
     const [tools, setTools] = useState<EditableTool[]>([])
     const [loadingTools, setLoadingTools] = useState(false)
+    const [connectingSlug, setConnectingSlug] = useState<string | null>(null)
     const [openSheet, setOpenSheet] = useState(openSheet_ || open || false)
 
     const [isSaving, setIsSaving] = useState(false)
@@ -351,6 +422,61 @@ function AgentEditSheet({
         } finally {
             setLoadingTools(false)
         }
+    }
+
+    const [availableToolsList, setAvailableToolsList] = useState<any[]>([])
+
+    // Fetch all available system tools
+    useEffect(() => {
+        const fetchAvailableTools = async () => {
+            try {
+                const res = await axios.get('/api/agent/tools?all=true')
+                if (Array.isArray(res.data)) {
+                    setAvailableToolsList(res.data)
+                }
+            } catch (e) {
+                console.warn("Failed to load available tools", e)
+            }
+        }
+        fetchAvailableTools()
+    }, [])
+
+    const unaddedTools = useMemo(() => {
+        const currentSlugs = new Set((tools || []).map((t) => t.slug.toLowerCase()))
+        return availableToolsList.filter((avail) => !currentSlugs.has(avail.slug.toLowerCase()))
+    }, [availableToolsList, tools])
+
+    const handleAddTool = (newTool: any) => {
+        const toolObj: EditableTool = {
+            slug: newTool.slug,
+            name: newTool.name,
+            connected: false,
+            logo: newTool.icon || ""
+        }
+        setTools((prev) => [...prev, toolObj])
+        setDraftAgent((prev: any) => ({
+            ...prev,
+            tools: [...(prev?.tools || []), newTool.slug]
+        }))
+        toast.add({
+            type: 'success',
+            title: `Added ${newTool.name} to agent!`
+        })
+    }
+
+    const handleRemoveTool = (slug: string) => {
+        setTools((prev) => prev.filter((t) => t.slug !== slug))
+        setDraftAgent((prev: any) => ({
+            ...prev,
+            tools: (prev?.tools || []).filter((t: any) => {
+                const s = typeof t === "string" ? t : t?.slug || ""
+                return s !== slug
+            })
+        }))
+        toast.add({
+            type: 'info',
+            title: "Tool removed from agent"
+        })
     }
 
     useEffect(() => {
@@ -589,6 +715,52 @@ function AgentEditSheet({
         onOpenChange?.(newOpen)
         if (!newOpen && closeSheet) {
             closeSheet()
+        }
+    }
+
+    useEffect(() => {
+        const handleFocus = () => {
+            if (agentConfig?.agentId) {
+                GetTools()
+            }
+        }
+        window.addEventListener("focus", handleFocus)
+        return () => window.removeEventListener("focus", handleFocus)
+    }, [agentConfig?.agentId])
+
+    if (!draftAgent) {
+        return null
+    }
+
+    const connectTool = async (slug: string) => {
+        setConnectingSlug(slug)
+        try {
+            const result = await axios.post('/api/agent/tools/connect', {
+                agentId: agentConfig?.agentId ?? '',
+                toolSlug: slug
+            })
+            console.log(result.data)
+
+            if (result?.data?.redirectUrl) {
+                window.open(result.data.redirectUrl, "_blank")
+                toast.add({
+                    type: 'success',
+                    title: 'Opening authorization window...'
+                })
+            } else if (result?.data?.message) {
+                toast.add({
+                    type: 'info',
+                    title: result.data.message
+                })
+            }
+        } catch (error: any) {
+            console.error("Failed to connect tool:", error)
+            toast.add({
+                type: 'error',
+                title: error?.response?.data?.error || "Failed to connect tool"
+            })
+        } finally {
+            setConnectingSlug(null)
         }
     }
 
@@ -835,14 +1007,51 @@ function AgentEditSheet({
                     </div>
 
                     {/* Connected Tools */}
-                    <div>
-                        <h3 className="font-medium">
-                            Connected Tools
-                        </h3>
-                        <p className="text-xs text-muted-foreground">
-                            {tools.length} of{" "}
-                            {tools.length} connected
-                        </p>
+                    <div className="flex items-center justify-between">
+                        <div>
+                            <h3 className="font-medium text-slate-900">
+                                Connected Tools
+                            </h3>
+                            <p className="text-xs text-muted-foreground">
+                                {tools.filter((t) => t.connected).length} of{" "}
+                                {tools.length} connected
+                            </p>
+                        </div>
+
+                        {unaddedTools.length > 0 && (
+                            <DropdownMenu>
+                                <DropdownMenuTrigger
+                                    className="h-8 px-2.5 inline-flex items-center gap-1.5 text-xs font-medium rounded-lg border border-slate-200 hover:bg-slate-50 transition-colors cursor-pointer outline-none text-slate-700"
+                                >
+                                    <Plus className="w-3.5 h-3.5" />
+                                    <span>Add Tool</span>
+                                </DropdownMenuTrigger>
+                                <DropdownMenuContent align="end" className="w-56 p-1.5 rounded-xl shadow-lg border-slate-200">
+                                    <div className="px-2 py-1 text-[11px] font-semibold text-slate-400 uppercase tracking-wider">
+                                        Available Tools
+                                    </div>
+                                    <div className="max-h-56 overflow-y-auto space-y-0.5">
+                                        {unaddedTools.map((avail) => (
+                                            <DropdownMenuItem
+                                                key={avail.slug}
+                                                onClick={() => handleAddTool(avail)}
+                                                className="flex items-center gap-2.5 px-2.5 py-2 text-xs font-medium cursor-pointer rounded-lg hover:bg-slate-100"
+                                            >
+                                                <div className="size-5 rounded flex items-center justify-center shrink-0">
+                                                    {avail.icon ? (
+                                                        <img src={avail.icon} alt={avail.name} className="w-4 h-4 object-contain" />
+                                                    ) : (
+                                                        getToolMeta(avail.slug).icon
+                                                    )}
+                                                </div>
+                                                <span className="truncate flex-1 text-slate-700">{avail.name}</span>
+                                                <Plus className="w-3.5 h-3.5 text-slate-400" />
+                                            </DropdownMenuItem>
+                                        ))}
+                                    </div>
+                                </DropdownMenuContent>
+                            </DropdownMenu>
+                        )}
                     </div>
 
                     <div className="space-y-2">
@@ -879,25 +1088,47 @@ function AgentEditSheet({
                                         <p className="text-sm font-medium">
                                             {tool.name}
                                         </p>
-                                        <p className={`text-[11px] font-medium mt-0.5 ${
-                                            tool.connected ? "text-emerald-600" : "text-rose-500"
-                                        }`}>
-                                            {tool.connected ? "Connected" : "Not connected"}
+                                        <p className="text-xs text-muted-foreground">
+                                            {tool.connected ? (
+                                                <span className="text-emerald-600">Connected</span>
+                                            ) : (
+                                                <span className="text-red-500">Not connected</span>
+                                            )}
                                         </p>
                                     </div>
                                 </div>
 
-                                <button
-                                    type="button"
-                                    onClick={() => toggleToolConnection(tool.slug)}
-                                    className={`text-xs font-medium px-3.5 py-1.5 rounded-lg transition-colors cursor-pointer ${
-                                        tool.connected
-                                            ? "border border-slate-200 hover:bg-slate-100 text-slate-700"
-                                            : "bg-slate-900 hover:bg-slate-800 text-white"
-                                    }`}
-                                >
-                                    {tool.connected ? "Disconnect" : "Connect"}
-                                </button>
+                                <div className="flex items-center gap-1.5">
+                                    <Button
+                                        type="button"
+                                        onClick={() => connectTool(tool.slug)}
+                                        variant={
+                                            tool.connected
+                                                ? "outline"
+                                                : "default"
+                                        }
+                                        size="sm"
+                                        disabled={connectingSlug === tool.slug}
+                                    >
+                                        {connectingSlug === tool.slug ? (
+                                            <>
+                                                <Loader2 className="w-3.5 h-3.5 animate-spin mr-1.5" />
+                                                Connecting...
+                                            </>
+                                        ) : (
+                                            tool.connected ? "Disconnect" : "Connect"
+                                        )}
+                                    </Button>
+
+                                    <button
+                                        type="button"
+                                        onClick={() => handleRemoveTool(tool.slug)}
+                                        className="size-7 inline-flex items-center justify-center rounded-lg text-slate-400 hover:text-red-500 hover:bg-red-50 transition-colors cursor-pointer"
+                                        title="Remove tool"
+                                    >
+                                        <Trash2 className="w-3.5 h-3.5" />
+                                    </button>
+                                </div>
                             </div>
                         ))}
                         {!loadingTools && tools.length === 0 && (

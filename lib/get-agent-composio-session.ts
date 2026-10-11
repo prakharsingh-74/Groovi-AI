@@ -3,12 +3,25 @@ import { composio } from "./composio";
 import { AgentConfig, db } from "@/db";
 import { eq } from "drizzle-orm";
 
-const SLUG_ALIASES: Record<string, string> = {
+export const SLUG_ALIASES: Record<string, string> = {
     google_calendar: "googlecalendar",
     calendar: "googlecalendar",
     "google-calendar": "googlecalendar",
+    googlecalendar: "googlecalendar",
     serp_search: "serpapi",
     serp: "serpapi",
+    browserbase: "browserbase_tool",
+    browserbase_tool: "browserbase_tool",
+    browserbase_mcp: "browserbase_tool",
+    googlesheets: "googlesheets",
+    google_sheets: "googlesheets",
+    "google-sheets": "googlesheets",
+    github: "github",
+    gmail: "gmail",
+    slack: "slack",
+    notion: "notion",
+    supabase: "supabase",
+    outlook: "outlook",
 };
 
 let cachedValidSlugs: Set<string> | null = null;
@@ -58,16 +71,14 @@ export async function getOrCreateAgentSession(agentConfig: CreatedAgentType, use
         }
     }
 
-    const session = await composio.sessions.create(userEmail, {
-        toolkits: composioToolkits
-    });
+    const session = await composio.sessions.create(userEmail);
 
     // save session ID
     await SaveComposioSessionId(agentConfig?.agentId, session);
     return session;
 }
 
-const SaveComposioSessionId = async (agentId: string, session: any) => {
+export const SaveComposioSessionId = async (agentId: string, session: any) => {
     const sessionId = session?.sessionId || session?.id;
     if (!sessionId || !agentId) return;
 
