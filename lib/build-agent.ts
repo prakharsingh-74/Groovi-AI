@@ -3,6 +3,7 @@ import { getOrCreateAgentSession } from "./get-agent-composio-session";
 import { Agent, setTraceProcessors } from "@openai/agents";
 import { setDefaultOpenAIClient, setOpenAIAPI } from "@openai/agents-openai";
 import OpenAI from "openai";
+import { browserbaseResearchTool } from "./browserbase-tool";
 
 let isTracingDisabled = false;
 
@@ -106,6 +107,14 @@ Formatting Rules:
 - Output clean, readable plain text.
 - Do NOT use markdown headers (such as #, ##, ###) or asterisks for bold or italics (such as **, *).
 - Use simple hyphens (-) or numbers (1., 2.) when listing items.
+Browser Research Rules:
+- Use browser_research when the user explicitly asks to search or browse the live web.
+- Use browser_research for current prices, availability, comparisons, or real-time information.
+- Do not claim that pricing is current unless browser_research verifies it.
+- Include the source URLs returned by browser_research in the final response.
+- Clearly distinguish verified facts from conclusions or recommendations.
+- Browser research is read-only. Never use it to purchase, log in,
+  upload files, download files, or modify external systems.
 
 Use only the available tools when needed.
 Do not claim that an action succeeded unless the tool result confirms it.
@@ -116,6 +125,6 @@ Ask for confirmation before destructive or high-risk actions.
         name: agentConfig.name,
         model: setupModel(overrideProvider, overrideModel),
         instructions,
-        tools: composioTools
+        tools: [...composioTools, browserbaseResearchTool]
     });
 }
