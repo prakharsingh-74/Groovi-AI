@@ -19,18 +19,31 @@ import { CreatedAgentType } from "./CreateAgent"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
-import { Shuffle, Plus, X, Loader2, Clock } from "lucide-react"
+import { Shuffle, Plus, X, Loader2, Loader2 as Loader2Icon, Clock, Link2, Unlink } from "lucide-react"
 import axios from "axios"
 import { toast } from "@/components/ui/toast"
+import Image from "next/image"
 
 type Props = {
+    children?: React.ReactNode
+    agentConfig?: CreatedAgentType | null
+    setUpdatedAgent?: any
+    openSheet_?: boolean
+    closeSheet?: any
+    // Backwards compatibility props
     agent?: CreatedAgentType | null
     createdAgent?: CreatedAgentType | null
     open?: boolean
     onOpenChange?: (open: boolean) => void
     trigger?: React.ReactNode
     onSave?: (updatedAgent: CreatedAgentType) => void
-    setUpdatedAgent?: (updatedAgent: CreatedAgentType) => void
+}
+
+export type EditableTool = {
+    name: string
+    connected: boolean
+    slug: string
+    logo: string
 }
 
 const HOURS = ["01", "02", "03", "04", "05", "06", "07", "08", "09", "10", "11", "12"]
@@ -234,21 +247,38 @@ const TimePickerPanel = React.memo(function TimePickerPanel({
 
 // Memoized Tool Card Component
 const ToolCard = React.memo(function ToolCard({
-    meta,
+    tool,
     isConnected,
     onToggle,
 }: {
-    meta: { slug: string; name: string; icon: React.ReactNode }
+    tool: { slug: string; name: string; icon?: React.ReactNode; logo?: string; connected?: boolean }
     isConnected: boolean
     onToggle: (slug: string) => void
 }) {
     return (
         <div className="rounded-2xl border border-slate-200/90 p-3.5 flex items-center justify-between bg-white">
-            <div className="flex items-center gap-3 min-w-0">
-                {meta.icon}
-                <div className="min-w-0">
-                    <p className="text-xs font-semibold text-slate-900 truncate">
-                        {meta.name}
+            <div className="flex items-center gap-3">
+                <div className="flex size-9 items-center justify-center rounded-lg">
+                    {/* {tool.connected ? (
+                        <Link2 className="size-4 text-emerald-600" />
+                    ) : (
+                        <Unlink className="size-4 text-muted-foreground" />
+                    )} */}
+                    {tool.logo ? (
+                        <img
+                            src={tool.logo}
+                            alt={tool.name}
+                            width={30}
+                            height={30}
+                            className="rounded-md object-contain"
+                        />
+                    ) : (
+                        tool.icon
+                    )}
+                </div>
+                <div>
+                    <p className="text-sm font-medium">
+                        {tool.name}
                     </p>
                     <p className={`text-[11px] font-medium mt-0.5 ${
                         isConnected ? "text-emerald-600" : "text-rose-500"
@@ -260,7 +290,7 @@ const ToolCard = React.memo(function ToolCard({
 
             <button
                 type="button"
-                onClick={() => onToggle(meta.slug)}
+                onClick={() => onToggle(tool.slug)}
                 className={`text-xs font-medium px-3.5 py-1.5 rounded-lg transition-colors cursor-pointer ${
                     isConnected
                         ? "border border-slate-200 hover:bg-slate-100 text-slate-700"
@@ -274,19 +304,26 @@ const ToolCard = React.memo(function ToolCard({
 })
 
 function AgentEditSheet({
+    agentConfig: propAgentConfig,
+    setUpdatedAgent,
+    openSheet_ = false,
+    closeSheet,
+    // backwards-compatibility props
     agent,
     createdAgent,
     open,
     onOpenChange,
     trigger,
     onSave,
-    setUpdatedAgent,
 }: Props) {
-    const activeAgent = agent || createdAgent || null
+    const agentConfig = propAgentConfig ?? agent ?? createdAgent ?? null
 
-    // Unified draftAgent state pattern matching tutorial screenshots
-    const [draftAgent, setDraftAgent] = useState<CreatedAgentType | null>(activeAgent)
-    const [newSkill, setNewSkill] = useState("")
+    const [draftAgent, setDraftAgent] = useState<CreatedAgentType | null>(agentConfig)
+    const [skillInput, setSkillInput] = useState("")
+    const [tools, setTools] = useState<EditableTool[]>([])
+    const [loadingTools, setLoadingTools] = useState(false)
+    const [openSheet, setOpenSheet] = useState(openSheet_ || open || false)
+
     const [isSaving, setIsSaving] = useState(false)
     const [saved, setSaved] = useState(false)
 
@@ -300,17 +337,41 @@ function AgentEditSheet({
     const minuteContainerRef = useRef<HTMLDivElement | null>(null)
     const saveTimerRef = useRef<NodeJS.Timeout | null>(null)
 
-    // Sync draftAgent whenever incoming agent prop changes
+    //Get Tools
+    const GetTools = async () => {
+        setLoadingTools(true)
+        try {
+            const result = await axios.get('/api/agent/tools?agentId=' + agentConfig?.agentId)
+            console.log(result.data)
+            if (Array.isArray(result.data)) {
+                setTools(result.data)
+            }
+        } catch (error) {
+            console.error("Failed to fetch tools:", error)
+        } finally {
+            setLoadingTools(false)
+        }
+    }
+
     useEffect(() => {
-        const incoming = agent || createdAgent || null
-        if (incoming) {
-            setDraftAgent(incoming)
-            const parsedTime = parseTimeString(incoming.schedule?.time)
+        setDraftAgent(agentConfig)
+        agentConfig && GetTools()
+        if (agentConfig?.schedule?.time) {
+            const parsedTime = parseTimeString(agentConfig.schedule.time)
             setSelectedHour(parsedTime.hour)
             setSelectedMinute(parsedTime.minute)
             setSelectedPeriod(parsedTime.period as "AM" | "PM")
         }
-    }, [agent, createdAgent])
+    }, [agentConfig])
+
+    // Sync openSheet if controlled via open prop or openSheet_
+    useEffect(() => {
+        if (open !== undefined) {
+            setOpenSheet(open)
+        } else if (openSheet_ !== undefined) {
+            setOpenSheet(openSheet_)
+        }
+    }, [open, openSheet_])
 
     // Clean up timer on unmount
     useEffect(() => {
@@ -318,6 +379,57 @@ function AgentEditSheet({
             if (saveTimerRef.current) clearTimeout(saveTimerRef.current)
         }
     }, [])
+
+    const updateDraft = (key: string, value: any) => {
+        setDraftAgent((prev: any) => ({
+            ...prev,
+            [key]: value,
+        }))
+    }
+
+    const onHandleInputChange = useCallback((field: string, value: any) => {
+        updateDraft(field, value)
+    }, [])
+
+    const onHandleScheduleChange = useCallback((field: string, value: any) => {
+        setDraftAgent((prev: any) => ({
+            ...prev,
+            schedule: {
+                ...prev?.schedule,
+                [field]: value,
+            },
+        }))
+    }, [])
+
+    const shuffleImage = () => {
+        const randomSeed = Math.random().toString(36).substring(2, 9)
+        const newUrl = `https://api.dicebear.com/10.x/bottts-neutral/svg?seed=${randomSeed}`
+        updateDraft("agentImage", newUrl)
+    }
+
+    const addSkill = () => {
+        const trimmed = (skillInput || "").trim()
+        if (trimmed) {
+            setDraftAgent((current: any) => {
+                const existing = current?.skills || []
+                if (existing.includes(trimmed)) return current
+                return {
+                    ...current,
+                    skills: [...existing, trimmed],
+                }
+            })
+            setSkillInput("")
+        }
+    }
+
+    const removeSkill = (skillToRemove: string | number) => {
+        setDraftAgent((prev: any) => ({
+            ...prev,
+            skills: (prev?.skills || []).filter((s: string, i: number) =>
+                typeof skillToRemove === "number" ? i !== skillToRemove : s !== skillToRemove
+            ),
+        }))
+    }
 
     // hasSchedule check matching screenshot line 133
     const hasSchedule =
@@ -338,23 +450,6 @@ function AgentEditSheet({
         }
     }, [timePickerOpen])
 
-    const onHandleInputChange = useCallback((field: string, value: any) => {
-        setDraftAgent((prev: any) => ({
-            ...prev,
-            [field]: value
-        }))
-    }, [])
-
-    const onHandleScheduleChange = useCallback((field: string, value: any) => {
-        setDraftAgent((prev: any) => ({
-            ...prev,
-            schedule: {
-                ...prev?.schedule,
-                [field]: value
-            }
-        }))
-    }, [])
-
     const handleHourSelect = useCallback((h: string) => {
         setSelectedHour(h)
         const newTime = `${h}:${selectedMinute} ${selectedPeriod}`
@@ -373,37 +468,10 @@ function AgentEditSheet({
         onHandleScheduleChange("time", newTime)
     }, [selectedHour, selectedMinute, onHandleScheduleChange])
 
-    const handleShuffleImage = useCallback(() => {
-        const randomSeed = Math.random().toString(36).substring(2, 9)
-        const newUrl = `https://api.dicebear.com/10.x/bottts-neutral/svg?seed=${randomSeed}`
-        onHandleInputChange("agentImage", newUrl)
-    }, [onHandleInputChange])
-
-    const addSkill = useCallback(() => {
-        setNewSkill((prev) => {
-            const trimmed = prev.trim()
-            if (trimmed) {
-                setDraftAgent((current: any) => {
-                    const existing = current?.skills || []
-                    if (existing.includes(trimmed)) return current
-                    return {
-                        ...current,
-                        skills: [...existing, trimmed]
-                    }
-                })
-            }
-            return ""
-        })
-    }, [])
-
-    const removeSkill = useCallback((index: number) => {
-        setDraftAgent((prev: any) => ({
-            ...prev,
-            skills: (prev?.skills || []).filter((_: any, i: number) => i !== index)
-        }))
-    }, [])
-
     const toggleToolConnection = useCallback((slug: string) => {
+        setTools((prev) =>
+            prev.map((t) => (t.slug === slug ? { ...t, connected: !t.connected } : t))
+        )
         setDraftAgent((prev: any) => {
             const rawTools = prev?.tools || []
             const updatedTools = rawTools.map((t: any) => {
@@ -418,7 +486,7 @@ function AgentEditSheet({
             })
             return {
                 ...prev,
-                tools: updatedTools
+                tools: updatedTools,
             }
         })
     }, [])
@@ -432,9 +500,41 @@ function AgentEditSheet({
         return toolsList.map((t: any) => getToolMeta(t))
     }, [toolsList])
 
+    const toolDisplayItems = useMemo(() => {
+        if (tools && tools.length > 0) {
+            return tools.map((t) => {
+                const meta = getToolMeta(t.slug)
+                return {
+                    slug: t.slug,
+                    name: t.name || meta.name || t.slug,
+                    logo: t.logo,
+                    icon: meta.icon,
+                    connected: Boolean(t.connected),
+                }
+            })
+        }
+        return toolItems.map((meta) => {
+            const matchingTool = toolsList.find((t: any) => {
+                const s = typeof t === "string" ? t : t?.slug || t?.name || ""
+                return s === meta.slug
+            })
+            const isConn = typeof matchingTool === "object" ? Boolean(matchingTool?.connected) : false
+            return {
+                ...meta,
+                connected: isConn,
+            }
+        })
+    }, [tools, toolItems, toolsList])
+
     const connectedCount = useMemo(() => {
-        return toolsList.filter((t: any) => typeof t === "object" && Boolean(t?.connected)).length
-    }, [toolsList])
+        return toolDisplayItems.filter((t) => t.connected).length
+    }, [toolDisplayItems])
+
+    const handleCloseSheet = useCallback(() => {
+        setOpenSheet(false)
+        onOpenChange?.(false)
+        closeSheet?.()
+    }, [onOpenChange, closeSheet])
 
     // handleSubmit matching screenshots 1 & 2
     const handleSubmit = useCallback(async (event?: any) => {
@@ -468,7 +568,7 @@ function AgentEditSheet({
 
             saveTimerRef.current = setTimeout(() => {
                 setSaved(false)
-                onOpenChange?.(false)
+                handleCloseSheet()
             }, 800)
         } catch (err: any) {
             console.error("Failed to save agent updates:", err)
@@ -479,20 +579,24 @@ function AgentEditSheet({
         } finally {
             setIsSaving(false)
         }
-    }, [draftAgent, setUpdatedAgent, onSave, onOpenChange])
+    }, [draftAgent, setUpdatedAgent, onSave, handleCloseSheet])
 
-    const sheetProps = useMemo(() => {
-        const props: Record<string, any> = {}
-        if (open !== undefined) props.open = open
-        if (onOpenChange !== undefined) props.onOpenChange = onOpenChange
-        return props
-    }, [open, onOpenChange])
+    const isControlled = open !== undefined
+    const isSheetOpen = isControlled ? open : openSheet
+
+    const handleOpenChange = (newOpen: boolean) => {
+        setOpenSheet(newOpen)
+        onOpenChange?.(newOpen)
+        if (!newOpen && closeSheet) {
+            closeSheet()
+        }
+    }
 
     return (
-        <Sheet {...sheetProps}>
+        <Sheet open={isSheetOpen} onOpenChange={handleOpenChange}>
             {trigger ? (
                 <SheetTrigger render={trigger as React.ReactElement} />
-            ) : open === undefined ? (
+            ) : open === undefined && openSheet_ === false ? (
                 <SheetTrigger className="text-sm font-medium text-slate-700 hover:text-slate-900 px-2.5 py-1 rounded-md hover:bg-slate-100 transition-colors cursor-pointer outline-none">
                     Open
                 </SheetTrigger>
@@ -557,7 +661,7 @@ function AgentEditSheet({
                                 type="button"
                                 variant="outline"
                                 size="sm"
-                                onClick={handleShuffleImage}
+                                onClick={shuffleImage}
                                 className="mt-2.5 h-8 gap-1.5 text-xs font-medium rounded-lg border-slate-200 hover:bg-slate-50 cursor-pointer"
                             >
                                 <Shuffle className="w-3.5 h-3.5" />
@@ -706,8 +810,8 @@ function AgentEditSheet({
 
                         <div className="flex gap-2 pt-1">
                             <Input
-                                value={newSkill}
-                                onChange={(e) => setNewSkill(e.target.value)}
+                                value={skillInput}
+                                onChange={(e) => setSkillInput(e.target.value)}
                                 onKeyDown={(e) => {
                                     if (e.key === "Enter") {
                                         e.preventDefault()
@@ -731,34 +835,72 @@ function AgentEditSheet({
                     </div>
 
                     {/* Connected Tools */}
-                    <div className="space-y-2.5">
-                        <div>
-                            <h4 className="font-semibold text-sm text-slate-900">Connected Tools</h4>
-                            <p className="text-xs text-slate-500 mt-0.5">
-                                {connectedCount} of {toolItems.length} connected
-                            </p>
-                        </div>
+                    <div>
+                        <h3 className="font-medium">
+                            Connected Tools
+                        </h3>
+                        <p className="text-xs text-muted-foreground">
+                            {tools.length} of{" "}
+                            {tools.length} connected
+                        </p>
+                    </div>
 
-                        {toolItems.length > 0 ? (
-                            <div className="space-y-2">
-                                {toolItems.map((meta) => {
-                                    const matchingTool = toolsList.find((t: any) => {
-                                        const s = typeof t === "string" ? t : t?.slug || t?.name || ""
-                                        return s === meta.slug
-                                    })
-                                    const isConnected = typeof matchingTool === "object" ? Boolean(matchingTool?.connected) : false
-
-                                    return (
-                                        <ToolCard
-                                            key={meta.slug}
-                                            meta={meta}
-                                            isConnected={isConnected}
-                                            onToggle={toggleToolConnection}
-                                        />
-                                    )
-                                })}
+                    <div className="space-y-2">
+                        {loadingTools && (
+                            <div className="p-2 border rounded-2xl flex items-center justify-center gap-2 text-sm text-slate-500">
+                                <Loader2Icon className="animate-spin" /> Loading Tools....
                             </div>
-                        ) : (
+                        )}
+                        {tools.map((tool, index) => (
+                            <div
+                                key={`${tool.name}-${index}`}
+                                className="rounded-2xl border border-slate-200/90 p-3.5 flex items-center justify-between bg-white"
+                            >
+                                <div className="flex items-center gap-3">
+                                    <div className="flex size-9 items-center justify-center rounded-lg">
+                                        {/* {tool.connected ? (
+                                            <Link2 className="size-4 text-emerald-600" />
+                                        ) : (
+                                            <Unlink className="size-4 text-muted-foreground" />
+                                        )} */}
+                                        {tool.logo ? (
+                                            <img
+                                                src={tool.logo}
+                                                alt={tool.name}
+                                                width={30}
+                                                height={30}
+                                                className="rounded-md object-contain"
+                                            />
+                                        ) : (
+                                            getToolMeta(tool.slug).icon
+                                        )}
+                                    </div>
+                                    <div>
+                                        <p className="text-sm font-medium">
+                                            {tool.name}
+                                        </p>
+                                        <p className={`text-[11px] font-medium mt-0.5 ${
+                                            tool.connected ? "text-emerald-600" : "text-rose-500"
+                                        }`}>
+                                            {tool.connected ? "Connected" : "Not connected"}
+                                        </p>
+                                    </div>
+                                </div>
+
+                                <button
+                                    type="button"
+                                    onClick={() => toggleToolConnection(tool.slug)}
+                                    className={`text-xs font-medium px-3.5 py-1.5 rounded-lg transition-colors cursor-pointer ${
+                                        tool.connected
+                                            ? "border border-slate-200 hover:bg-slate-100 text-slate-700"
+                                            : "bg-slate-900 hover:bg-slate-800 text-white"
+                                    }`}
+                                >
+                                    {tool.connected ? "Disconnect" : "Connect"}
+                                </button>
+                            </div>
+                        ))}
+                        {!loadingTools && tools.length === 0 && (
                             <div className="p-4 text-center border border-dashed rounded-2xl text-xs text-slate-400">
                                 No connected tools required for this agent.
                             </div>
@@ -779,7 +921,10 @@ function AgentEditSheet({
 
                 {/* BOTTOM FOOTER */}
                 <div className="shrink-0 sticky bottom-0 z-20 bg-white border-t border-slate-200/90 px-6 py-3.5 flex items-center justify-end gap-2.5 shadow-[0_-4px_12px_rgba(0,0,0,0.03)]">
-                    <SheetClose className="h-9 px-4 inline-flex items-center justify-center text-xs font-medium rounded-lg border border-slate-200 text-slate-700 hover:bg-slate-100 transition-colors cursor-pointer outline-none">
+                    <SheetClose
+                        onClick={handleCloseSheet}
+                        className="h-9 px-4 inline-flex items-center justify-center text-xs font-medium rounded-lg border border-slate-200 text-slate-700 hover:bg-slate-100 transition-colors cursor-pointer outline-none"
+                    >
                         Cancel
                     </SheetClose>
 

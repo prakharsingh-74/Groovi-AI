@@ -328,6 +328,7 @@ function MyAgents() {
             {/* Editing Agent Sheet */}
             {editingAgent && (
                 <AgentEditSheet
+                    agentConfig={editingAgent}
                     agent={editingAgent}
                     createdAgent={editingAgent}
                     open={Boolean(editingAgent)}

@@ -148,6 +148,7 @@ function NewAgentCard({ createdAgent, onUpdate }: Props) {
 
             {/* Controlled AgentEditSheet */}
             <AgentEditSheet
+                agentConfig={currentAgent}
                 createdAgent={currentAgent}
                 setUpdatedAgent={handleAgentSave}
                 open={sheetOpen}

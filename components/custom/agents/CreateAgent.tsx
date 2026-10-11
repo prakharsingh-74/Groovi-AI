@@ -85,7 +85,8 @@ export type CreatedAgentType = {
     schedule: AgentSchedule,
     outputFormat: string,
     status: string,
-    createdAt: string
+    createdAt: string,
+    composioSessionId?: string 
 }
 
 export type createdAgentType = CreatedAgentType
