@@ -4,9 +4,10 @@ import OpenAI from "openai";
 import { AgentConfigSystemPrompt } from "@/data/Prompt";
 import { AgentConfigRespSchema } from "@/data/ResponseSchema";
 import { ensureNeatlogsInit, wrapGoogleGenAI, trace, flush } from "@/lib/neatlogs";
-import { AgentConfig, db, tools } from "@/db";
+import { AgentConfig, AgentRun, db, tools } from "@/db";
 import { currentUser } from "@clerk/nextjs/server";
 import { eq, desc } from "drizzle-orm";
+import { calculateNextDailyRun } from "@/lib/agent-schedule";
 
 export async function POST(req: NextRequest) {
     const { prompt, timezone } = await req.json();
@@ -128,6 +129,32 @@ export async function POST(req: NextRequest) {
                     timezone: timezone
                 }
             }).returning();
+
+            //generate to next run and add to agent run table
+
+            const schedule = aiOutput?.config?.schedule;
+            const agentTimezone = timezone || schedule?.timezone || "UTC";
+
+            const firstRun = schedule?.type == 'recurring' 
+            && schedule?.frequency == 'daily' && schedule?.time ? calculateNextDailyRun({
+                time: schedule.time,
+                timezone: agentTimezone
+            }) : null;
+
+            console.log("firstRun", firstRun);
+
+            if (firstRun) {
+                const runInsert = await db.insert(AgentRun)
+                .values({
+                    agentId,
+                    userEmail: user?.primaryEmailAddress?.emailAddress ?? "",
+                    scheduledFor: firstRun,
+                    timezone: agentTimezone,
+                    status: "scheduled"
+                }).returning();
+                console.log(runInsert);
+            }
+
             return NextResponse.json({
                 ...aiOutput,
                 agentId: agentId,
