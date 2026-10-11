@@ -4,6 +4,7 @@ import React, { useState, useEffect, useCallback } from "react"
 import axios from "axios"
 import { CreatedAgentType } from "./CreateAgent"
 import AgentEditSheet from "./AgentEditSheet"
+import AgentChatDrawer from "./AgentChatDrawer"
 import { Button } from "@/components/ui/button"
 import { Skeleton } from "@/components/ui/skeleton"
 import {
@@ -16,7 +17,7 @@ import {
 } from "@/components/ui/dropdown-menu"
 import {
     Play,
-    MessageSquare,
+    MessageCircle,
     Ellipsis,
     CalendarCheck2,
     Pause,
@@ -31,7 +32,9 @@ import { toast } from "@/components/ui/toast"
 function MyAgents() {
     const [agents, setAgents] = useState<CreatedAgentType[]>([])
     const [loading, setLoading] = useState<boolean>(true)
-    const [editingAgent, setEditingAgent] = useState<CreatedAgentType | null>(null)
+    const [selectedEditAgent, setSelectedEditAgent] = useState<CreatedAgentType | null>(null)
+    const [openChatDrawer, setOpenChatDrawer] = useState(false)
+    const [openEditSheet, setOpenEditSheet] = useState(false)
     const [isRefreshing, setIsRefreshing] = useState<boolean>(false)
 
     // Fetch all user agents from GET /api/agent/configure
@@ -67,7 +70,8 @@ function MyAgents() {
         setAgents((prev) =>
             prev.map((a) => (a.agentId === updated.agentId ? { ...a, ...updated } : a))
         )
-        setEditingAgent(null)
+        setSelectedEditAgent(null)
+        setOpenEditSheet(false)
     }, [])
 
     // Toggle pause / resume status
@@ -120,10 +124,8 @@ function MyAgents() {
 
     // Chat with agent action
     const handleChatWithAgent = (agent: CreatedAgentType) => {
-        toast.add({
-            title: `Starting chat with ${agent.name}...`,
-            type: "success"
-        })
+        setSelectedEditAgent(agent)
+        setOpenChatDrawer(true)
     }
 
     return (
@@ -241,7 +243,10 @@ function MyAgents() {
                                                         <span>Run Now</span>
                                                     </DropdownMenuItem>
                                                     <DropdownMenuItem
-                                                        onClick={() => setEditingAgent(agent)}
+                                                        onClick={() => {
+                                                            setSelectedEditAgent(agent)
+                                                            setOpenEditSheet(true)
+                                                        }}
                                                         className="gap-2 text-xs font-medium cursor-pointer"
                                                     >
                                                         <Pencil className="w-3.5 h-3.5 text-blue-600" />
@@ -312,10 +317,13 @@ function MyAgents() {
 
                                     <Button
                                         size="sm"
-                                        onClick={() => handleChatWithAgent(agent)}
+                                        onClick={() => {
+                                            setSelectedEditAgent(agent)
+                                            setOpenChatDrawer(true)
+                                        }}
                                         className="h-9 w-full text-xs font-semibold rounded-xl bg-purple-600 hover:bg-purple-700 text-white gap-1.5 cursor-pointer shadow-xs transition-colors"
                                     >
-                                        <MessageSquare className="w-3.5 h-3.5 fill-current" />
+                                        <MessageCircle className="w-3.5 h-3.5 fill-current" />
                                         <span>Chat With Agent</span>
                                     </Button>
                                 </div>
@@ -326,17 +334,27 @@ function MyAgents() {
             )}
 
             {/* Editing Agent Sheet */}
-            {editingAgent && (
+            {selectedEditAgent && openEditSheet && (
                 <AgentEditSheet
-                    agentConfig={editingAgent}
-                    agent={editingAgent}
-                    createdAgent={editingAgent}
-                    open={Boolean(editingAgent)}
-                    onOpenChange={(open) => !open && setEditingAgent(null)}
+                    agentConfig={selectedEditAgent}
+                    agent={selectedEditAgent}
+                    createdAgent={selectedEditAgent}
+                    open={openEditSheet}
+                    onOpenChange={(open) => {
+                        setOpenEditSheet(open)
+                        if (!open && !openChatDrawer) setSelectedEditAgent(null)
+                    }}
                     onSave={handleAgentUpdated}
                     setUpdatedAgent={handleAgentUpdated}
                 />
             )}
+
+            {/* Chat with Agent Drawer */}
+            <AgentChatDrawer
+                agent={selectedEditAgent}
+                open={openChatDrawer}
+                onOpenChange={setOpenChatDrawer}
+            />
         </div>
     )
 }
