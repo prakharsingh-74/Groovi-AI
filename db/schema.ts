@@ -53,7 +53,7 @@ export const tools = pgTable("tools", {
 export const AgentConfig = pgTable("agentConfig", {
   id: serial("id").primaryKey(),  
   userEmail: text('email').references(()=>users.email),
-  agentId: varchar('agentId'),
+  agentId: varchar('agentId').unique(),
   name: varchar('name'),
   agentImage: varchar('agentImage'),
   description: text('description'),
@@ -114,7 +114,7 @@ export const AgentRun = pgTable(
       .defaultNow()
       .notNull(),
   },
-  (table) => [
+  table => [
     uniqueIndex("unique_agent_occurrence").on(
       table.agentId,
       table.scheduledFor,
@@ -123,7 +123,7 @@ export const AgentRun = pgTable(
       table.status,
       table.scheduledFor,
     ),
-  ]
+  ],
 );
 
 export type User = typeof users.$inferSelect;
