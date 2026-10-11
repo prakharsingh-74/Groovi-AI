@@ -6,7 +6,7 @@ import { AgentConfigRespSchema } from "@/data/ResponseSchema";
 import { ensureNeatlogsInit, wrapGoogleGenAI, trace, flush } from "@/lib/neatlogs";
 import { AgentConfig, AgentRun, db, tools } from "@/db";
 import { currentUser } from "@clerk/nextjs/server";
-import { eq, desc } from "drizzle-orm";
+import { eq, desc, and } from "drizzle-orm";
 import { calculateNextDailyRun } from "@/lib/agent-schedule";
 
 export async function POST(req: NextRequest) {
@@ -235,19 +235,21 @@ export async function GET(req: NextRequest) {
 }
 
 export async function DELETE(req: NextRequest) {
+    const { agentId } = await req.json().catch(() => ({
+        agentId: new URL(req.url).searchParams.get("agentId"),
+    }));
+
     try {
-        const { searchParams } = new URL(req.url);
-        const agentId = searchParams.get("agentId");
+        const deleteAgentConfig = await db.delete(AgentConfig)
+            .where(eq(AgentConfig.agentId, agentId));
 
-        if (!agentId) {
-            return NextResponse.json({ error: "agentId is required" }, { status: 400 });
-        }
+        const deleteAgentRun = await db.delete(AgentRun)
+            .where(and(eq(AgentRun.agentId, agentId), eq(AgentRun.status, 'scheduled')));
 
-        await db.delete(AgentConfig).where(eq(AgentConfig.agentId, agentId));
-        return NextResponse.json({ success: true });
-    } catch (e: any) {
-        console.error("Error in agent configure DELETE:", e);
-        return NextResponse.json({ error: String(e?.message || e) }, { status: 500 });
+        return NextResponse.json({ msg: 'Agent Deleted!' }, { status: 200 });
+    }
+    catch (e) {
+        return NextResponse.json({ error: 'Internal Server Error' }, { status: 500 });
     }
 }
 

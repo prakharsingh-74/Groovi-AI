@@ -16,6 +16,16 @@ import {
     DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
 import {
+    AlertDialog,
+    AlertDialogAction,
+    AlertDialogCancel,
+    AlertDialogContent,
+    AlertDialogDescription,
+    AlertDialogFooter,
+    AlertDialogHeader,
+    AlertDialogTitle,
+} from "@/components/ui/alert-dialog"
+import {
     Play,
     MessageCircle,
     Ellipsis,
@@ -26,6 +36,7 @@ import {
     Bot,
     Plus,
     RefreshCw,
+    Loader2,
 } from "lucide-react"
 import { toast } from "@/components/ui/toast"
 
@@ -96,21 +107,35 @@ function MyAgents() {
         }
     }
 
-    // Delete agent
-    const handleDeleteAgent = async (agent: CreatedAgentType) => {
+    // Delete agent state & confirmation flow
+    const [agentToDelete, setAgentToDelete] = useState<CreatedAgentType | null>(null)
+    const [isDeleting, setIsDeleting] = useState<boolean>(false)
+
+    const handleDeleteAgent = (agent: CreatedAgentType) => {
+        setAgentToDelete(agent)
+    }
+
+    const handleConfirmDelete = async () => {
+        if (!agentToDelete) return
         try {
-            await axios.delete(`/api/agent/configure?agentId=${agent.agentId}`)
-            setAgents((prev) => prev.filter((a) => a.agentId !== agent.agentId))
+            setIsDeleting(true)
+            await axios.delete(`/api/agent/configure?agentId=${agentToDelete.agentId}`, {
+                data: { agentId: agentToDelete.agentId }
+            })
+            setAgents((prev) => prev.filter((a) => a.agentId !== agentToDelete.agentId))
             toast.add({
                 title: "Agent Deleted Successfully",
                 type: "success"
             })
+            setAgentToDelete(null)
         } catch (error) {
             console.error("Failed to delete agent:", error)
             toast.add({
                 title: "Failed to delete agent",
                 type: "error"
             })
+        } finally {
+            setIsDeleting(false)
         }
     }
 
@@ -355,6 +380,44 @@ function MyAgents() {
                 open={openChatDrawer}
                 onOpenChange={setOpenChatDrawer}
             />
+
+            {/* Delete Confirmation Alert Dialog */}
+            <AlertDialog
+                open={Boolean(agentToDelete)}
+                onOpenChange={(open) => {
+                    if (!open && !isDeleting) setAgentToDelete(null)
+                }}
+            >
+                <AlertDialogContent>
+                    <AlertDialogHeader>
+                        <AlertDialogTitle>Delete Agent</AlertDialogTitle>
+                        <AlertDialogDescription>
+                            Are you sure you want to delete{" "}
+                            <span className="font-semibold text-slate-800">
+                                {agentToDelete?.name || "this agent"}
+                            </span>
+                            ? This will permanently delete the agent and its scheduled runs. This action cannot be undone.
+                        </AlertDialogDescription>
+                    </AlertDialogHeader>
+                    <AlertDialogFooter>
+                        <AlertDialogCancel
+                            disabled={isDeleting}
+                            onClick={() => setAgentToDelete(null)}
+                        >
+                            Cancel
+                        </AlertDialogCancel>
+                        <AlertDialogAction
+                            variant="destructive"
+                            disabled={isDeleting}
+                            onClick={handleConfirmDelete}
+                            className="bg-red-600 hover:bg-red-700 text-white gap-1.5"
+                        >
+                            {isDeleting && <Loader2 className="w-4 h-4 animate-spin" />}
+                            <span>{isDeleting ? "Deleting..." : "Delete Agent"}</span>
+                        </AlertDialogAction>
+                    </AlertDialogFooter>
+                </AlertDialogContent>
+            </AlertDialog>
         </div>
     )
 }
