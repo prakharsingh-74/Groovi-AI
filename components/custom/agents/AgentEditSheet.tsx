@@ -24,11 +24,13 @@ import axios from "axios"
 import { toast } from "@/components/ui/toast"
 
 type Props = {
-    createdAgent: CreatedAgentType | null
+    agent?: CreatedAgentType | null
+    createdAgent?: CreatedAgentType | null
     open?: boolean
     onOpenChange?: (open: boolean) => void
     trigger?: React.ReactNode
     onSave?: (updatedAgent: CreatedAgentType) => void
+    setUpdatedAgent?: (updatedAgent: CreatedAgentType) => void
 }
 
 const HOURS = ["01", "02", "03", "04", "05", "06", "07", "08", "09", "10", "11", "12"]
@@ -130,7 +132,7 @@ function getToolMeta(tool: any) {
     return meta
 }
 
-// Memoized Time Picker Panel (avoids re-rendering 74 buttons on every form input stroke)
+// Memoized Time Picker Panel
 const TimePickerPanel = React.memo(function TimePickerPanel({
     selectedHour,
     selectedMinute,
@@ -271,18 +273,20 @@ const ToolCard = React.memo(function ToolCard({
     )
 })
 
-function AgentEditSheet({ createdAgent, open, onOpenChange, trigger, onSave }: Props) {
-    const [name, setName] = useState(createdAgent?.name || "")
-    const [agentImage, setAgentImage] = useState(createdAgent?.agentImage || "")
-    const [objective, setObjective] = useState(createdAgent?.objective || "")
-    const [instructions, setInstructions] = useState(createdAgent?.instructions || "")
-    const [scheduleType, setScheduleType] = useState(createdAgent?.schedule?.type || "manual")
-    const [scheduleTime, setScheduleTime] = useState(createdAgent?.schedule?.time || "")
-    const [scheduleFreq, setScheduleFreq] = useState(createdAgent?.schedule?.frequency || "on-demand")
-    const [skills, setSkills] = useState<string[]>([])
+function AgentEditSheet({
+    agent,
+    createdAgent,
+    open,
+    onOpenChange,
+    trigger,
+    onSave,
+    setUpdatedAgent,
+}: Props) {
+    const activeAgent = agent || createdAgent || null
+
+    // Unified draftAgent state pattern matching tutorial screenshots
+    const [draftAgent, setDraftAgent] = useState<CreatedAgentType | null>(activeAgent)
     const [newSkill, setNewSkill] = useState("")
-    const [connectedTools, setConnectedTools] = useState<Record<string, boolean>>({})
-    const [outputFormat, setOutputFormat] = useState(createdAgent?.outputFormat || "")
     const [isSaving, setIsSaving] = useState(false)
     const [saved, setSaved] = useState(false)
 
@@ -296,39 +300,17 @@ function AgentEditSheet({ createdAgent, open, onOpenChange, trigger, onSave }: P
     const minuteContainerRef = useRef<HTMLDivElement | null>(null)
     const saveTimerRef = useRef<NodeJS.Timeout | null>(null)
 
-    // Sync all state whenever createdAgent changes
+    // Sync draftAgent whenever incoming agent prop changes
     useEffect(() => {
-        if (createdAgent) {
-            setName(createdAgent.name || "")
-            setAgentImage(
-                createdAgent.agentImage ||
-                `https://api.dicebear.com/10.x/bottts-neutral/svg?seed=${createdAgent.name || 'agent'}`
-            )
-            setObjective(createdAgent.objective || "")
-            setInstructions(createdAgent.instructions || "")
-            setScheduleType(createdAgent.schedule?.type || "manual")
-            setScheduleTime(createdAgent.schedule?.time || "")
-            setScheduleFreq(createdAgent.schedule?.frequency || "on-demand")
-            setSkills(Array.isArray(createdAgent.skills) ? [...createdAgent.skills] : [])
-            setOutputFormat(createdAgent.outputFormat || "")
-
-            const parsedTime = parseTimeString(createdAgent.schedule?.time)
+        const incoming = agent || createdAgent || null
+        if (incoming) {
+            setDraftAgent(incoming)
+            const parsedTime = parseTimeString(incoming.schedule?.time)
             setSelectedHour(parsedTime.hour)
             setSelectedMinute(parsedTime.minute)
             setSelectedPeriod(parsedTime.period as "AM" | "PM")
-
-            const initialConnected: Record<string, boolean> = {}
-            if (Array.isArray(createdAgent.tools)) {
-                createdAgent.tools.forEach((t: any) => {
-                    const slug = typeof t === "string" ? t : t?.slug || t?.name || ""
-                    if (slug) {
-                        initialConnected[slug] = Boolean(t?.connected)
-                    }
-                })
-            }
-            setConnectedTools(initialConnected)
         }
-    }, [createdAgent])
+    }, [agent, createdAgent])
 
     // Clean up timer on unmount
     useEffect(() => {
@@ -337,7 +319,12 @@ function AgentEditSheet({ createdAgent, open, onOpenChange, trigger, onSave }: P
         }
     }, [])
 
-    // Auto-scroll selected hour & minute into view when popover opens (with timer cleanup)
+    // hasSchedule check matching screenshot line 133
+    const hasSchedule =
+        draftAgent?.schedule?.type === "once" ||
+        draftAgent?.schedule?.type === "recurring"
+
+    // Auto-scroll selected hour & minute into view when popover opens
     useEffect(() => {
         if (timePickerOpen) {
             const timer = setTimeout(() => {
@@ -351,133 +338,148 @@ function AgentEditSheet({ createdAgent, open, onOpenChange, trigger, onSave }: P
         }
     }, [timePickerOpen])
 
+    const onHandleInputChange = useCallback((field: string, value: any) => {
+        setDraftAgent((prev: any) => ({
+            ...prev,
+            [field]: value
+        }))
+    }, [])
+
+    const onHandleScheduleChange = useCallback((field: string, value: any) => {
+        setDraftAgent((prev: any) => ({
+            ...prev,
+            schedule: {
+                ...prev?.schedule,
+                [field]: value
+            }
+        }))
+    }, [])
+
     const handleHourSelect = useCallback((h: string) => {
         setSelectedHour(h)
-        setScheduleTime(`${h}:${selectedMinute} ${selectedPeriod}`)
-    }, [selectedMinute, selectedPeriod])
+        const newTime = `${h}:${selectedMinute} ${selectedPeriod}`
+        onHandleScheduleChange("time", newTime)
+    }, [selectedMinute, selectedPeriod, onHandleScheduleChange])
 
     const handleMinuteSelect = useCallback((m: string) => {
         setSelectedMinute(m)
-        setScheduleTime(`${selectedHour}:${m} ${selectedPeriod}`)
-    }, [selectedHour, selectedPeriod])
+        const newTime = `${selectedHour}:${m} ${selectedPeriod}`
+        onHandleScheduleChange("time", newTime)
+    }, [selectedHour, selectedPeriod, onHandleScheduleChange])
 
     const handlePeriodSelect = useCallback((p: "AM" | "PM") => {
         setSelectedPeriod(p)
-        setScheduleTime(`${selectedHour}:${selectedMinute} ${p}`)
-    }, [selectedHour, selectedMinute])
+        const newTime = `${selectedHour}:${selectedMinute} ${p}`
+        onHandleScheduleChange("time", newTime)
+    }, [selectedHour, selectedMinute, onHandleScheduleChange])
 
     const handleShuffleImage = useCallback(() => {
         const randomSeed = Math.random().toString(36).substring(2, 9)
         const newUrl = `https://api.dicebear.com/10.x/bottts-neutral/svg?seed=${randomSeed}`
-        setAgentImage(newUrl)
-    }, [])
+        onHandleInputChange("agentImage", newUrl)
+    }, [onHandleInputChange])
 
     const addSkill = useCallback(() => {
         setNewSkill((prev) => {
             const trimmed = prev.trim()
             if (trimmed) {
-                setSkills((s) => s.includes(trimmed) ? s : [...s, trimmed])
+                setDraftAgent((current: any) => {
+                    const existing = current?.skills || []
+                    if (existing.includes(trimmed)) return current
+                    return {
+                        ...current,
+                        skills: [...existing, trimmed]
+                    }
+                })
             }
             return ""
         })
     }, [])
 
     const removeSkill = useCallback((index: number) => {
-        setSkills((prev) => prev.filter((_, i) => i !== index))
+        setDraftAgent((prev: any) => ({
+            ...prev,
+            skills: (prev?.skills || []).filter((_: any, i: number) => i !== index)
+        }))
     }, [])
 
     const toggleToolConnection = useCallback((slug: string) => {
-        setConnectedTools((prev) => ({
-            ...prev,
-            [slug]: !prev[slug]
-        }))
+        setDraftAgent((prev: any) => {
+            const rawTools = prev?.tools || []
+            const updatedTools = rawTools.map((t: any) => {
+                const s = typeof t === "string" ? t : t?.slug || t?.name || ""
+                if (s === slug) {
+                    const isConn = typeof t === "object" ? Boolean(t?.connected) : false
+                    return typeof t === "string"
+                        ? { name: s, slug: s, connected: !isConn }
+                        : { ...t, connected: !isConn }
+                }
+                return t
+            })
+            return {
+                ...prev,
+                tools: updatedTools
+            }
+        })
     }, [])
 
     // Memoize tools array and processed tool items
     const toolsList = useMemo(() => {
-        return Array.isArray(createdAgent?.tools) ? createdAgent.tools : []
-    }, [createdAgent?.tools])
+        return Array.isArray(draftAgent?.tools) ? draftAgent.tools : []
+    }, [draftAgent?.tools])
 
     const toolItems = useMemo(() => {
         return toolsList.map((t: any) => getToolMeta(t))
     }, [toolsList])
 
     const connectedCount = useMemo(() => {
-        return toolItems.filter((meta) => Boolean(connectedTools[meta.slug])).length
-    }, [toolItems, connectedTools])
+        return toolsList.filter((t: any) => typeof t === "object" && Boolean(t?.connected)).length
+    }, [toolsList])
 
-    const handleSave = useCallback(async () => {
+    // handleSubmit matching screenshots 1 & 2
+    const handleSubmit = useCallback(async (event?: any) => {
+        event?.preventDefault?.()
         setIsSaving(true)
         try {
-            const updatedSchedule = {
-                type: scheduleType,
-                frequency: scheduleFreq,
-                time: scheduleTime,
-            }
-
-            const updatedTools = toolsList.map((t: any) => {
-                const slug = typeof t === "string" ? t : t?.slug || t?.name || ""
-                return typeof t === "string"
-                    ? slug
-                    : { ...t, connected: Boolean(connectedTools[slug]) }
-            })
-
-            const updatedAgent: CreatedAgentType = {
-                ...createdAgent!,
-                name,
-                agentImage,
-                objective,
-                instructions,
-                skills,
-                schedule: updatedSchedule,
-                tools: updatedTools,
-                outputFormat,
-            }
-
-            // Update to DB via PUT /api/agent/configure
+            // update to DB as well
             const result = await axios.put('/api/agent/configure', {
-                ...updatedAgent
+                ...draftAgent
             })
+            console.log(result.data)
 
-            const savedAgent = result.data || updatedAgent
+            if (result.data?.error) {
+                toast.add({
+                    type: 'error',
+                    title: result.data?.error,
+                })
+                return
+            }
+
+            // Update Updated Agent to parent
+            const savedAgent = result.data || draftAgent
+            setUpdatedAgent?.(savedAgent)
             onSave?.(savedAgent)
             setSaved(true)
 
             toast.add({
-                title: "Agent updated successfully",
-                type: "success"
+                type: 'success',
+                title: "Agent Updated!",
             })
 
             saveTimerRef.current = setTimeout(() => {
                 setSaved(false)
                 onOpenChange?.(false)
-            }, 1000)
+            }, 800)
         } catch (err: any) {
             console.error("Failed to save agent updates:", err)
             toast.add({
-                title: "Failed to save agent",
-                description: String(err?.response?.data?.error || err?.message || "An error occurred while saving."),
-                type: "error"
+                type: 'error',
+                title: String(err?.response?.data?.error || err?.message || "Failed to update agent"),
             })
         } finally {
             setIsSaving(false)
         }
-    }, [
-        createdAgent,
-        name,
-        agentImage,
-        objective,
-        instructions,
-        skills,
-        scheduleType,
-        scheduleFreq,
-        scheduleTime,
-        toolsList,
-        connectedTools,
-        outputFormat,
-        onSave,
-        onOpenChange
-    ])
+    }, [draftAgent, setUpdatedAgent, onSave, onOpenChange])
 
     const sheetProps = useMemo(() => {
         const props: Record<string, any> = {}
@@ -504,9 +506,9 @@ function AgentEditSheet({ createdAgent, open, onOpenChange, trigger, onSave }: P
                 <SheetHeader className="shrink-0 p-5 px-6 border-b border-slate-200/90 bg-white">
                     <div className="flex items-center gap-3 pr-8">
                         <div className="w-10 h-10 rounded-2xl bg-[#edf1f7] flex items-center justify-center shrink-0 border border-slate-100 overflow-hidden">
-                            {agentImage ? (
+                            {draftAgent?.agentImage ? (
                                 <img
-                                    src={agentImage}
+                                    src={draftAgent.agentImage}
                                     alt="Agent Avatar"
                                     className="w-8 h-8 object-contain"
                                 />
@@ -534,9 +536,9 @@ function AgentEditSheet({ createdAgent, open, onOpenChange, trigger, onSave }: P
                     {/* Top Card: Agent Image */}
                     <div className="rounded-2xl border border-slate-200/90 p-4 bg-white flex items-center gap-4">
                         <div className="w-16 h-16 rounded-2xl bg-[#edf1f7] border border-slate-100 flex items-center justify-center shrink-0 overflow-hidden">
-                            {agentImage ? (
+                            {draftAgent?.agentImage ? (
                                 <img
-                                    src={agentImage}
+                                    src={draftAgent.agentImage}
                                     alt="Agent Preview"
                                     className="w-12 h-12 object-contain"
                                 />
@@ -568,8 +570,8 @@ function AgentEditSheet({ createdAgent, open, onOpenChange, trigger, onSave }: P
                     <div className="space-y-1.5">
                         <label className="text-xs font-semibold text-slate-800">Agent Name</label>
                         <Input
-                            value={name}
-                            onChange={(e) => setName(e.target.value)}
+                            value={draftAgent?.name || ""}
+                            onChange={(e) => onHandleInputChange("name", e.target.value)}
                             placeholder="Agent Name"
                             className="h-10 text-xs sm:text-sm rounded-lg"
                         />
@@ -579,8 +581,8 @@ function AgentEditSheet({ createdAgent, open, onOpenChange, trigger, onSave }: P
                     <div className="space-y-1.5">
                         <label className="text-xs font-semibold text-slate-800">Objective</label>
                         <Textarea
-                            value={objective}
-                            onChange={(e) => setObjective(e.target.value)}
+                            value={draftAgent?.objective || ""}
+                            onChange={(e) => onHandleInputChange("objective", e.target.value)}
                             placeholder="Review events and tasks to create a prioritized daily focus plan."
                             className="min-h-[85px] text-xs sm:text-sm leading-relaxed rounded-lg resize-y"
                         />
@@ -590,26 +592,26 @@ function AgentEditSheet({ createdAgent, open, onOpenChange, trigger, onSave }: P
                     <div className="space-y-1.5">
                         <label className="text-xs font-semibold text-slate-800">Instructions</label>
                         <Textarea
-                            value={instructions}
-                            onChange={(e) => setInstructions(e.target.value)}
+                            value={draftAgent?.instructions || ""}
+                            onChange={(e) => onHandleInputChange("instructions", e.target.value)}
                             placeholder="1. Fetch today's scheduled meetings and events..."
                             className="min-h-[170px] text-xs sm:text-sm leading-relaxed rounded-lg resize-y font-normal"
                         />
                     </div>
 
-                    {/* Schedule Card */}
+                    {/* Schedule Card with hasSchedule check */}
                     <div className="rounded-2xl border border-slate-200/90 p-4 space-y-3.5 bg-white">
                         <div>
                             <h4 className="font-semibold text-sm text-slate-900">Schedule</h4>
                             <p className="text-xs text-slate-500 mt-0.5">Choose when and how often this agent runs.</p>
                         </div>
 
-                        <div className="grid grid-cols-2 gap-3">
+                        <div className={`grid ${hasSchedule ? "grid-cols-2" : "grid-cols-1"} gap-3`}>
                             <div className="space-y-1.5">
                                 <label className="text-xs font-semibold text-slate-700">Run Type</label>
                                 <select
-                                    value={scheduleType}
-                                    onChange={(e) => setScheduleType(e.target.value)}
+                                    value={draftAgent?.schedule?.type || "manual"}
+                                    onChange={(e) => onHandleScheduleChange("type", e.target.value)}
                                     className="h-9 w-full rounded-lg border border-slate-200 bg-white px-3 text-xs font-medium text-slate-800 outline-none focus:border-purple-500 cursor-pointer"
                                 >
                                     <option value="manual">manual</option>
@@ -619,54 +621,59 @@ function AgentEditSheet({ createdAgent, open, onOpenChange, trigger, onSave }: P
                                 </select>
                             </div>
 
-                            {/* Interactive Time Picker Popover */}
-                            <div className="space-y-1.5 relative">
-                                <label className="text-xs font-semibold text-slate-700">Time</label>
-                                <Popover open={timePickerOpen} onOpenChange={setTimePickerOpen}>
-                                    <PopoverTrigger
-                                        type="button"
-                                        className="flex items-center justify-between h-9 w-full rounded-lg border border-slate-200 bg-white px-3 text-xs font-medium text-slate-800 outline-none hover:border-slate-300 focus:border-purple-500 cursor-pointer text-left transition-colors"
-                                    >
-                                        <span className={scheduleTime && scheduleTime !== "--:-- --" ? "text-slate-900" : "text-slate-400 font-normal"}>
-                                            {scheduleTime || "--:-- --"}
-                                        </span>
-                                        <Clock className="w-3.5 h-3.5 text-slate-500 shrink-0 ml-1.5" />
-                                    </PopoverTrigger>
-                                    <PopoverContent
-                                        align="end"
-                                        side="bottom"
-                                        sideOffset={4}
-                                        className="z-60 w-[190px] p-1.5 bg-white border border-slate-200 shadow-2xl rounded-xl ring-1 ring-slate-900/5 focus:outline-none"
-                                    >
-                                        <TimePickerPanel
-                                            selectedHour={selectedHour}
-                                            selectedMinute={selectedMinute}
-                                            selectedPeriod={selectedPeriod}
-                                            onHourSelect={handleHourSelect}
-                                            onMinuteSelect={handleMinuteSelect}
-                                            onPeriodSelect={handlePeriodSelect}
-                                            hourContainerRef={hourContainerRef}
-                                            minuteContainerRef={minuteContainerRef}
-                                        />
-                                    </PopoverContent>
-                                </Popover>
-                            </div>
+                            {/* Interactive Time Picker Popover (shown when hasSchedule) */}
+                            {hasSchedule && (
+                                <div className="space-y-1.5 relative">
+                                    <label className="text-xs font-semibold text-slate-700">Time</label>
+                                    <Popover open={timePickerOpen} onOpenChange={setTimePickerOpen}>
+                                        <PopoverTrigger
+                                            type="button"
+                                            className="flex items-center justify-between h-9 w-full rounded-lg border border-slate-200 bg-white px-3 text-xs font-medium text-slate-800 outline-none hover:border-slate-300 focus:border-purple-500 cursor-pointer text-left transition-colors"
+                                        >
+                                            <span className={draftAgent?.schedule?.time && draftAgent?.schedule?.time !== "--:-- --" ? "text-slate-900" : "text-slate-400 font-normal"}>
+                                                {draftAgent?.schedule?.time || "--:-- --"}
+                                            </span>
+                                            <Clock className="w-3.5 h-3.5 text-slate-500 shrink-0 ml-1.5" />
+                                        </PopoverTrigger>
+                                        <PopoverContent
+                                            align="end"
+                                            side="bottom"
+                                            sideOffset={4}
+                                            className="z-60 w-[190px] p-1.5 bg-white border border-slate-200 shadow-2xl rounded-xl ring-1 ring-slate-900/5 focus:outline-none"
+                                        >
+                                            <TimePickerPanel
+                                                selectedHour={selectedHour}
+                                                selectedMinute={selectedMinute}
+                                                selectedPeriod={selectedPeriod}
+                                                onHourSelect={handleHourSelect}
+                                                onMinuteSelect={handleMinuteSelect}
+                                                onPeriodSelect={handlePeriodSelect}
+                                                hourContainerRef={hourContainerRef}
+                                                minuteContainerRef={minuteContainerRef}
+                                            />
+                                        </PopoverContent>
+                                    </Popover>
+                                </div>
+                            )}
                         </div>
 
-                        <div className="space-y-1.5">
-                            <label className="text-xs font-semibold text-slate-700">Frequency</label>
-                            <select
-                                value={scheduleFreq}
-                                onChange={(e) => setScheduleFreq(e.target.value)}
-                                className="h-9 w-full rounded-lg border border-slate-200 bg-white px-3 text-xs font-medium text-slate-800 outline-none focus:border-purple-500 cursor-pointer"
-                            >
-                                <option value="on-demand">on-demand</option>
-                                <option value="daily">daily</option>
-                                <option value="weekly">weekly</option>
-                                <option value="hourly">hourly</option>
-                                <option value="monthly">monthly</option>
-                            </select>
-                        </div>
+                        {/* Frequency (shown when hasSchedule) */}
+                        {hasSchedule && (
+                            <div className="space-y-1.5">
+                                <label className="text-xs font-semibold text-slate-700">Frequency</label>
+                                <select
+                                    value={draftAgent?.schedule?.frequency || "on-demand"}
+                                    onChange={(e) => onHandleScheduleChange("frequency", e.target.value)}
+                                    className="h-9 w-full rounded-lg border border-slate-200 bg-white px-3 text-xs font-medium text-slate-800 outline-none focus:border-purple-500 cursor-pointer"
+                                >
+                                    <option value="on-demand">on-demand</option>
+                                    <option value="daily">daily</option>
+                                    <option value="weekly">weekly</option>
+                                    <option value="hourly">hourly</option>
+                                    <option value="monthly">monthly</option>
+                                </select>
+                            </div>
+                        )}
                     </div>
 
                     {/* Skills */}
@@ -676,9 +683,9 @@ function AgentEditSheet({ createdAgent, open, onOpenChange, trigger, onSave }: P
                             <p className="text-xs text-slate-500 mt-0.5">Add or remove capabilities this agent should use.</p>
                         </div>
 
-                        {skills.length > 0 && (
+                        {(draftAgent?.skills || []).length > 0 && (
                             <div className="flex flex-wrap gap-2 pt-1">
-                                {skills.map((skill, index) => (
+                                {(draftAgent?.skills || []).map((skill: string, index: number) => (
                                     <span
                                         key={index}
                                         className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-medium bg-slate-100 text-slate-800 border border-slate-200/70"
@@ -734,14 +741,22 @@ function AgentEditSheet({ createdAgent, open, onOpenChange, trigger, onSave }: P
 
                         {toolItems.length > 0 ? (
                             <div className="space-y-2">
-                                {toolItems.map((meta) => (
-                                    <ToolCard
-                                        key={meta.slug}
-                                        meta={meta}
-                                        isConnected={Boolean(connectedTools[meta.slug])}
-                                        onToggle={toggleToolConnection}
-                                    />
-                                ))}
+                                {toolItems.map((meta) => {
+                                    const matchingTool = toolsList.find((t: any) => {
+                                        const s = typeof t === "string" ? t : t?.slug || t?.name || ""
+                                        return s === meta.slug
+                                    })
+                                    const isConnected = typeof matchingTool === "object" ? Boolean(matchingTool?.connected) : false
+
+                                    return (
+                                        <ToolCard
+                                            key={meta.slug}
+                                            meta={meta}
+                                            isConnected={isConnected}
+                                            onToggle={toggleToolConnection}
+                                        />
+                                    )
+                                })}
                             </div>
                         ) : (
                             <div className="p-4 text-center border border-dashed rounded-2xl text-xs text-slate-400">
@@ -754,15 +769,15 @@ function AgentEditSheet({ createdAgent, open, onOpenChange, trigger, onSave }: P
                     <div className="space-y-1.5">
                         <label className="text-xs font-semibold text-slate-800">Output Format</label>
                         <Textarea
-                            value={outputFormat}
-                            onChange={(e) => setOutputFormat(e.target.value)}
+                            value={draftAgent?.outputFormat || ""}
+                            onChange={(e) => onHandleInputChange("outputFormat", e.target.value)}
                             placeholder="A well-structured Markdown document containing..."
                             className="min-h-[140px] text-xs sm:text-sm leading-relaxed rounded-lg resize-y"
                         />
                     </div>
                 </div>
 
-                {/* 3. FIXED BOTTOM FOOTER - NEVER SCROLLS */}
+                {/* BOTTOM FOOTER */}
                 <div className="shrink-0 sticky bottom-0 z-20 bg-white border-t border-slate-200/90 px-6 py-3.5 flex items-center justify-end gap-2.5 shadow-[0_-4px_12px_rgba(0,0,0,0.03)]">
                     <SheetClose className="h-9 px-4 inline-flex items-center justify-center text-xs font-medium rounded-lg border border-slate-200 text-slate-700 hover:bg-slate-100 transition-colors cursor-pointer outline-none">
                         Cancel
@@ -771,7 +786,7 @@ function AgentEditSheet({ createdAgent, open, onOpenChange, trigger, onSave }: P
                     <Button
                         size="sm"
                         disabled={isSaving}
-                        onClick={handleSave}
+                        onClick={handleSubmit}
                         className="h-9 px-4 text-xs font-medium rounded-lg bg-[#7c3aed] hover:bg-[#6d28d9] text-white shadow-xs transition-colors cursor-pointer"
                     >
                         {isSaving ? (
@@ -791,4 +806,4 @@ function AgentEditSheet({ createdAgent, open, onOpenChange, trigger, onSave }: P
     )
 }
 
-export default AgentEditSheet;
+export default React.memo(AgentEditSheet)
