@@ -5,7 +5,7 @@ import { AgentConfigRespSchema } from "@/data/ResponseSchema";
 import { ensureNeatlogsInit, wrapGoogleGenAI, trace, flush } from "@/lib/neatlogs";
 import { AgentConfig, db, tools } from "@/db";
 import { currentUser } from "@clerk/nextjs/server";
-import { eq } from "drizzle-orm";
+import { eq, desc } from "drizzle-orm";
 
 export async function POST(req: NextRequest) {
     const { prompt } = await req.json();
@@ -130,4 +130,48 @@ export async function PUT(req: NextRequest) {
         return NextResponse.json({ error: String(e?.message || e) }, { status: 500 });
     }
 }
+
+export async function GET(req: NextRequest) {
+    try {
+        const user = await currentUser();
+        const userEmail = user?.primaryEmailAddress?.emailAddress;
+
+        let agentList;
+        if (userEmail) {
+            agentList = await db
+                .select()
+                .from(AgentConfig)
+                .where(eq(AgentConfig.userEmail, userEmail))
+                .orderBy(desc(AgentConfig.createdAt));
+        } else {
+            agentList = await db
+                .select()
+                .from(AgentConfig)
+                .orderBy(desc(AgentConfig.createdAt));
+        }
+
+        return NextResponse.json(agentList || []);
+    } catch (e: any) {
+        console.error("Error in agent configure GET:", e);
+        return NextResponse.json({ error: String(e?.message || e) }, { status: 500 });
+    }
+}
+
+export async function DELETE(req: NextRequest) {
+    try {
+        const { searchParams } = new URL(req.url);
+        const agentId = searchParams.get("agentId");
+
+        if (!agentId) {
+            return NextResponse.json({ error: "agentId is required" }, { status: 400 });
+        }
+
+        await db.delete(AgentConfig).where(eq(AgentConfig.agentId, agentId));
+        return NextResponse.json({ success: true });
+    } catch (e: any) {
+        console.error("Error in agent configure DELETE:", e);
+        return NextResponse.json({ error: String(e?.message || e) }, { status: 500 });
+    }
+}
+
 
