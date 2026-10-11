@@ -102,6 +102,11 @@ ${(agentConfig.skills ?? []).join(', ')}
 Required Output Format:
 ${agentConfig?.outputFormat}
 
+Formatting Rules:
+- Output clean, readable plain text.
+- Do NOT use markdown headers (such as #, ##, ###) or asterisks for bold or italics (such as **, *).
+- Use simple hyphens (-) or numbers (1., 2.) when listing items.
+
 Use only the available tools when needed.
 Do not claim that an action succeeded unless the tool result confirms it.
 Ask for confirmation before destructive or high-risk actions.

@@ -8,8 +8,9 @@ import {
     SheetDescription,
 } from "@/components/ui/sheet"
 import { CreatedAgentType } from './CreateAgent'
-import { Sparkles, X, Paperclip, ArrowUp, Loader2, RotateCcw } from 'lucide-react'
+import { Sparkles, X, ArrowUp, Loader2, RotateCcw } from 'lucide-react'
 import axios from 'axios'
+import { cleanAgentResponse } from '@/lib/utils'
 
 type ChatMessage = {
     id: string
@@ -145,10 +146,13 @@ export default function AgentChatDrawer({
 
             console.log(result.data?.finalOutput);
 
+            const rawOutput = result.data?.finalOutput || (typeof result.data === "string" ? result.data : `I completed your request: "${text}".`);
+            const cleanedOutput = cleanAgentResponse(rawOutput);
+
             const agentMessage: ChatMessage = {
-                id: crypto.randomUUID(),
+                id: typeof crypto.randomUUID === 'function' ? crypto.randomUUID() : `agent-${Date.now()}`,
                 role: "agent",
-                content: result.data?.finalOutput || (typeof result.data === "string" ? result.data : `I completed your request: "${text}".`),
+                content: cleanedOutput,
             }
 
             setMessages((prev) => [...prev, agentMessage])
@@ -298,7 +302,7 @@ export default function AgentChatDrawer({
 
                                         {/* Agent Message Bubble */}
                                         <div className="bg-white border border-slate-200/90 rounded-2xl rounded-tl-xs px-4 py-3 text-xs md:text-sm text-slate-800 shadow-2xs max-w-[85%] leading-relaxed whitespace-pre-wrap break-words">
-                                            {msg.content}
+                                            {msg.role === 'agent' ? cleanAgentResponse(msg.content) : msg.content}
                                         </div>
                                     </div>
                                 )
@@ -337,14 +341,7 @@ export default function AgentChatDrawer({
                             rows={2}
                             className="w-full resize-none border-none outline-none text-xs md:text-sm text-slate-800 placeholder:text-slate-400 bg-transparent min-h-[44px]"
                         />
-                        <div className="flex items-center justify-between pt-1">
-                            <button
-                                type="button"
-                                className="text-slate-400 hover:text-slate-600 p-1 rounded-lg hover:bg-slate-50 transition-colors cursor-pointer"
-                                title="Attach file"
-                            >
-                                <Paperclip className="w-4 h-4 stroke-[2]" />
-                            </button>
+                        <div className="flex items-center justify-end pt-1">
                             <button
                                 type="button"
                                 onClick={sendMessage}

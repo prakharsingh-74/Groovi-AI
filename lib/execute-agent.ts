@@ -1,6 +1,7 @@
 import { CreatedAgentType } from "@/components/custom/agents/CreateAgent";
 import { buildAgent } from "./build-agent";
 import { run } from "@openai/agents";
+import { cleanAgentResponse } from "./utils";
 
 export async function executeAgent({
     agentConfig,
@@ -21,7 +22,7 @@ export async function executeAgent({
         const agent = await buildAgent(agentConfig, userEmail);
         const result = await run(agent, taskInput);
         return {
-            finalOutput: result?.finalOutput
+            finalOutput: cleanAgentResponse(result?.finalOutput)
         };
     } catch (err: any) {
         console.warn("Primary agent execution encountered an error:", err?.message || err);
@@ -60,7 +61,7 @@ export async function executeAgent({
                     const fallbackAgent = await buildAgent(agentConfig, userEmail, fb.provider, fb.model);
                     const fallbackResult = await run(fallbackAgent, taskInput);
                     return {
-                        finalOutput: fallbackResult?.finalOutput
+                        finalOutput: cleanAgentResponse(fallbackResult?.finalOutput)
                     };
                 } catch (fbErr: any) {
                     console.warn(`[Fallback Failed] ${fb.provider} (${fb.model}):`, fbErr?.message || fbErr);
