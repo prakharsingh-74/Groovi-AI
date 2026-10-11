@@ -42,6 +42,13 @@ export async function POST(req: NextRequest) {
             });
         }
 
+        if (lowerSlug.includes("entire")) {
+            return NextResponse.json({
+                message: "Entire.io is integrated! Code Graph indexing & Checkpoints are active for this repository.",
+                redirectUrl: "https://entire.io"
+            });
+        }
+
         //@ts-ignore
         const session = await getOrCreateAgentSession(agentConfig[0], userEmail);
 

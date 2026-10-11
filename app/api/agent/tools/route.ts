@@ -16,7 +16,38 @@ export async function GET(req: NextRequest) {
 
     if (fetchAll) {
         const dbTools = await db.select().from(toolsTable);
-        return NextResponse.json(dbTools);
+        const hasEntire = dbTools.some(t => t.slug.toLowerCase().includes("entire"));
+        const allList = [...dbTools];
+        if (!hasEntire) {
+            allList.push({
+                id: "entire-tool-uuid",
+                slug: "entire",
+                name: "Entire.io",
+                description: "Code intelligence, Graph analysis, and continuous Git memory checkpoints for AI agents.",
+                category: "Developer Tools",
+                type: "native",
+                provider: "Entire.io",
+                icon: "/entire.svg",
+                status: "active",
+                requiresAuth: false,
+                authType: null,
+                authProvider: null,
+                capabilities: ["code_graph_search", "impact_analysis", "repo_memory", "checkpoints"],
+                useCases: ["Understand code", "Trace relationships", "Check change impact", "Preserve reasoning"],
+                permissions: [],
+                approvalRules: null,
+                config: null,
+                riskLevel: "low",
+                canRead: true,
+                canWrite: false,
+                canDelete: false,
+                canExecute: true,
+                enabled: true,
+                createdAt: new Date(),
+                updatedAt: new Date(),
+            } as any);
+        }
+        return NextResponse.json(allList);
     }
 
     //Fetch Agent Config
@@ -57,9 +88,11 @@ export async function GET(req: NextRequest) {
         const dbTool = dbToolMap.get(lowerSlug);
 
         // A tool is connected if:
+        // - For Entire.io: local/repo Entire integration is active
         // - For Composio toolkits (SerpApi, Browserbase, GitHub, Gmail, Slack, Google Calendar, Google Sheets, Supabase, Outlook, etc.): user has an active connection
         // - For native server tools (Web Search): handled by backend server environment
-        const isComposioToolkit = Boolean(
+        const isEntireTool = lowerSlug.includes("entire");
+        const isComposioToolkit = !isEntireTool && Boolean(
             toolkit ||
             [
                 'serp_search', 'serpapi',
@@ -71,7 +104,7 @@ export async function GET(req: NextRequest) {
             ].includes(lowerSlug) ||
             (dbTool && dbTool.requiresAuth)
         );
-        const isServerTool = dbTool ? !dbTool.requiresAuth : false;
+        const isServerTool = isEntireTool || (dbTool ? !dbTool.requiresAuth : false);
         const isConnected = isComposioToolkit
             ? toolkit?.connection?.isActive === true
             : isServerTool;

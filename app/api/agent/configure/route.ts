@@ -23,9 +23,15 @@ export async function POST(req: NextRequest) {
             slug: tools.slug
         }).from(tools);
 
-        const toolsList = aiTools.length > 0 
-            ? aiTools.map(t => `- ${t.slug}`).join('\n') 
-            : "- google_search\n- serp_search\n- browserbase\n- gmail\n- slack\n- google_calendar\n- notion";
+        const hasDbEntire = aiTools.some(t => t.slug.toLowerCase().includes("entire"));
+        const baseList = aiTools.map(t => `- ${t.slug}`);
+        if (!hasDbEntire) {
+            baseList.push('- entire');
+        }
+
+        const toolsList = baseList.length > 0 
+            ? baseList.join('\n') 
+            : "- google_search\n- serp_search\n- browserbase\n- gmail\n- slack\n- google_calendar\n- notion\n- entire";
 
         await ensureNeatlogsInit();
         const ai = wrapGoogleGenAI(new GoogleGenAI({ apiKey }));

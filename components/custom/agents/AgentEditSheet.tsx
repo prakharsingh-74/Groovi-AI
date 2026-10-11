@@ -185,6 +185,16 @@ function getToolMeta(tool: any) {
                 </div>
             )
         }
+    } else if (slug.includes("entire")) {
+        meta = {
+            slug: raw,
+            name: "Entire.io",
+            icon: (
+                <div className="w-8 h-8 rounded-lg bg-[#372aac] flex items-center justify-center text-white font-bold text-xs shrink-0 shadow-xs">
+                    <span className="font-bold text-[13px] tracking-tight">E</span>
+                </div>
+            )
+        }
     } else if (slug.includes("web_search") || slug.includes("search")) {
         meta = {
             slug: raw,
