@@ -9,7 +9,7 @@ import { currentUser } from "@clerk/nextjs/server";
 import { eq, desc } from "drizzle-orm";
 
 export async function POST(req: NextRequest) {
-    const { prompt } = await req.json();
+    const { prompt, timezone } = await req.json();
     const user=await currentUser();
 
     if (!prompt || !prompt.trim()) {
@@ -120,7 +120,13 @@ export async function POST(req: NextRequest) {
                 ...aiOutput.config,
                 agentImage: avatarUrl,
                 agentId: agentId,
-                userEmail: user?.primaryEmailAddress?.emailAddress ?? null
+                userEmail: user?.primaryEmailAddress?.emailAddress,
+                schedule: {
+                    time: aiOutput?.config?.schedule.time,
+                    type: aiOutput?.config?.schedule.type,
+                    frequency: aiOutput?.config?.schedule.frequency,
+                    timezone: timezone
+                }
             }).returning();
             return NextResponse.json({
                 ...aiOutput,

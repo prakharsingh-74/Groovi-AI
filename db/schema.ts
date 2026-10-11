@@ -1,4 +1,4 @@
-import { boolean, integer, jsonb, pgTable, serial, text, timestamp, uuid, varchar } from "drizzle-orm/pg-core";
+import { boolean, index, integer, jsonb, pgTable, serial, text, timestamp, uniqueIndex, uuid, varchar } from "drizzle-orm/pg-core";
 
 export const users = pgTable("users", {
   id: serial("id").primaryKey(),
@@ -67,6 +67,64 @@ export const AgentConfig = pgTable("agentConfig", {
   composioSessionId:varchar('composioSessionId'),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 })
+
+export const AgentRun = pgTable(
+  "agentRun",
+  {
+    id: uuid("id")
+      .defaultRandom()
+      .primaryKey(),
+
+    agentId: varchar("agentId")
+      .notNull()
+      .references(() => AgentConfig.agentId),
+
+    userEmail: text("email").notNull(),
+
+    scheduledFor: timestamp("scheduled_for", {
+      withTimezone: true,
+    }).notNull(),
+
+    timezone: varchar("timezone", {
+      length: 100,
+    }).notNull(),
+
+    status: varchar("status")
+      .default("scheduled")
+      .notNull(),
+
+    output: jsonb("output"),
+    error: text("error"),
+
+    queuedAt: timestamp("queued_at", {
+      withTimezone: true,
+    }),
+
+    startedAt: timestamp("started_at", {
+      withTimezone: true,
+    }),
+
+    completedAt: timestamp("completed_at", {
+      withTimezone: true,
+    }),
+
+    createdAt: timestamp("created_at", {
+      withTimezone: true,
+    })
+      .defaultNow()
+      .notNull(),
+  },
+  (table) => [
+    uniqueIndex("unique_agent_occurrence").on(
+      table.agentId,
+      table.scheduledFor,
+    ),
+    index("agent_run_schedule_lookup").on(
+      table.status,
+      table.scheduledFor,
+    ),
+  ]
+);
 
 export type User = typeof users.$inferSelect;
 export type NewUser = typeof users.$inferInsert;
