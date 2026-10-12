@@ -2,7 +2,8 @@
 import { Button } from '@/components/ui/button'
 import axios from 'axios'
 import { ArrowUp, BriefcaseBusiness, DollarSign, Loader2, Loader2Icon, Mail, Plus, Search } from 'lucide-react'
-import React, { useState } from 'react'
+import React, { useEffect, useState } from 'react'
+import { useSearchParams } from 'next/navigation'
 import AIAgentQuestions from './AIAgentQuestions'
 import NewAgentCard from './NewAgentCard'
 
@@ -122,11 +123,18 @@ export type ClarificationQuestion = {
 export type clarificationQuestion = ClarificationQuestion
 
 function CreateAgent() {
-
+    const searchParams = useSearchParams();
     const [prompt, setPrompt] = useState('')
     const [configResult, setConfigResult] = useState<AgentConfigResp | null>(null);
     const [createdAgent, setCreateadAgent] = useState<CreatedAgentType | null>(null);
     const [loading, setLoading] = useState(false);
+
+    useEffect(() => {
+        const queryPrompt = searchParams.get('prompt');
+        if (queryPrompt) {
+            setPrompt(queryPrompt);
+        }
+    }, [searchParams]);
 
     const getBrowserTimezone = () => {
         return Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC";

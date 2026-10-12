@@ -11,7 +11,7 @@ import {
 } from "@/components/ui/sidebar"
 import { UserDetailContext } from "@/context/UserDetailContext"
 import { UserButton } from "@clerk/nextjs"
-import { AppWindow, Blocks, Bot, Layers, Play, Settings, User2 } from "lucide-react"
+import { AppWindow, Blocks, Bot, CreditCard, Layers, Play } from "lucide-react"
 import Image from "next/image"
 import { usePathname } from "next/navigation"
 import { useRouter } from "next/navigation"
@@ -66,20 +66,12 @@ export function AppSidebar() {
                 </div>
                 <span>Templates</span>
             </SidebarMenuButton>
-        </SidebarGroup>
-        <SidebarGroup>
-            <SidebarGroupLabel>Users</SidebarGroupLabel>
-            <SidebarMenuButton className={`h-12 gap-3 hover:bg-slate-100 ${path==('/dashboard/settings')?'bg-slate-100':null}`}>
-                <div className="flex h-9 w-8 shrink-0 bg-gray-100 items-center justify-center rounded-lg">
-                    <Settings className="h-[18px] w-[18px] text-gray-900"/>
+
+            <SidebarMenuButton onClick={()=>router.push('/dashboard/billing')} className={`h-12 gap-3 hover:bg-slate-100 ${path==('/dashboard/billing')?'bg-slate-100':null}`}>
+                <div className="flex h-9 w-8 shrink-0 bg-emerald-100 items-center justify-center rounded-lg">
+                    <CreditCard className="h-[18px] w-[18px] text-emerald-900"/>
                 </div>
-                <span>Settings</span>
-            </SidebarMenuButton>
-            <SidebarMenuButton className={`h-12 gap-3 hover:bg-slate-100 ${path==('/dashboard/profile')?'bg-slate-100':null}`}>
-                <div className="flex h-9 w-8 shrink-0 bg-yellow-100 items-center justify-center rounded-lg">
-                    <User2 className="h-[18px] w-[18px] text-yellow-900"/>
-                </div>
-                <span>Profile</span>
+                <span>Billing</span>
             </SidebarMenuButton>
         </SidebarGroup>
       </SidebarContent>
@@ -92,7 +84,7 @@ export function AppSidebar() {
 
         <div className="flex items-center p-2 mt-2 gap-2.5">
             <UserButton/>
-            <span>{userDetail?.name}</span>
+            <span className="truncate">{userDetail?.name}</span>
         </div>
       </SidebarFooter>
     </Sidebar>
