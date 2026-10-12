@@ -221,19 +221,6 @@ groovi-ai/
 
 ---
 
-## Free vs. Pro Tier Breakdown
-
-| Feature | Free Tier | Pro Tier ($40/month) |
-| :--- | :--- | :--- |
-| **Autonomous Agents** | Up to **3 Agents** | **Unlimited Agents** |
-| **Execution Schedules** | Standard queue | Priority execution queue |
-| **Tool Bindings** | All OAuth integrations | All OAuth integrations |
-| **Production Templates** | Preview only (Locked) | **All 8+ Templates Unlocked** |
-| **Neatlogs Telemetry** | Basic run history | Detailed token & step telemetry |
-| **Support** | Community | Dedicated engineering support |
-
----
-
 ## License
 
 This project is licensed under the [MIT License](LICENSE).
