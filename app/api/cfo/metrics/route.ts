@@ -2,6 +2,19 @@ import { db, users, AgentConfig, AgentRun } from "@/db";
 import { count, eq } from "drizzle-orm";
 import { NextRequest, NextResponse } from "next/server";
 
+const CORS_HEADERS = {
+    "Access-Control-Allow-Origin": "*",
+    "Access-Control-Allow-Methods": "GET, OPTIONS",
+    "Access-Control-Allow-Headers": "Content-Type, Authorization, x-api-key",
+};
+
+export async function OPTIONS() {
+    return new NextResponse(null, {
+        status: 204,
+        headers: CORS_HEADERS,
+    });
+}
+
 /**
  * Endpoint for cfo.ai to pull live Groovi AI business and operational metrics.
  * Can be called with Bearer token authentication or API Key.
@@ -16,7 +29,7 @@ export async function GET(req: NextRequest) {
         if (expectedToken) {
             const token = authHeader.replace(/^Bearer\s+/i, "") || apiKeyHeader;
             if (token !== expectedToken) {
-                return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+                return NextResponse.json({ error: "Unauthorized" }, { status: 401, headers: CORS_HEADERS });
             }
         }
 
@@ -79,9 +92,9 @@ export async function GET(req: NextRequest) {
                     customerSuccess: 17250,
                 },
             },
-        });
+        }, { headers: CORS_HEADERS });
     } catch (err: any) {
         console.error("Failed to aggregate CFO metrics:", err);
-        return NextResponse.json({ error: "Internal Server Error" }, { status: 500 });
+        return NextResponse.json({ error: "Internal Server Error" }, { status: 500, headers: CORS_HEADERS });
     }
 }

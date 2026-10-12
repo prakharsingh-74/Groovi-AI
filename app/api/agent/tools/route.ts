@@ -68,7 +68,6 @@ export async function GET(req: NextRequest) {
     let toolkitResult: any = { items: [] };
     const userEmail = user.primaryEmailAddress?.emailAddress || user.emailAddresses?.[0]?.emailAddress || "user@grooviai.internal";
     try {
-        //@ts-ignore
         const session = await getOrCreateAgentSession(agentConfig, userEmail);
         if (session && typeof session.toolkits === "function") {
             toolkitResult = await session.toolkits();

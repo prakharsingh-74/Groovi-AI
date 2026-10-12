@@ -49,7 +49,7 @@ export async function POST(req: NextRequest) {
             });
         }
 
-        //@ts-ignore
+        
         const session = await getOrCreateAgentSession(agentConfig[0], userEmail);
 
         const normalizedSlug = SLUG_ALIASES[lowerSlug] || lowerSlug;

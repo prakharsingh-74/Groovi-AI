@@ -48,7 +48,18 @@ async function getValidComposioSlugs(): Promise<Set<string>> {
     return cachedValidSlugs;
 }
 
-export async function getOrCreateAgentSession(agentConfig: CreatedAgentType, userEmail: string) {
+export type AgentConfigInput = {
+    agentId?: string | null;
+    composioSessionId?: string | null;
+    tools?: any;
+    userEmail?: string | null;
+    [key: string]: any;
+};
+
+export async function getOrCreateAgentSession(
+    agentConfig: AgentConfigInput | CreatedAgentType,
+    userEmail: string
+) {
     if (agentConfig?.composioSessionId) {
         try {
             return await composio.sessions.use(agentConfig.composioSessionId);
@@ -78,7 +89,7 @@ export async function getOrCreateAgentSession(agentConfig: CreatedAgentType, use
     return session;
 }
 
-export const SaveComposioSessionId = async (agentId: string, session: any) => {
+export const SaveComposioSessionId = async (agentId?: string | null, session?: any) => {
     const sessionId = session?.sessionId || session?.id;
     if (!sessionId || !agentId) return;
 
