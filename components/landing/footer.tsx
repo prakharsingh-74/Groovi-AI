@@ -76,7 +76,7 @@ export default function Footer() {
             </FooterLinkColumn>
 
             <FooterLinkColumn title="ECOSYSTEM">
-              <a href="https://github.com" target="_blank" rel="noreferrer" className="hover:text-white transition-colors">GitHub Repository</a>
+              <a href="https://github.com/prakharsingh-74/groovi-ai" target="_blank" rel="noreferrer" className="hover:text-white transition-colors">GitHub Repository</a>
               <a href="#pricing" className="hover:text-white transition-colors">Free vs Pro</a>
               <a href="#faq" className="hover:text-white transition-colors">Specifications</a>
               <span className="text-zinc-500 cursor-default">v2.0 Production</span>
