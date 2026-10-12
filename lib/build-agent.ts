@@ -4,6 +4,7 @@ import { Agent, setTraceProcessors } from "@openai/agents";
 import { setDefaultOpenAIClient, setOpenAIAPI } from "@openai/agents-openai";
 import OpenAI from "openai";
 import { browserbaseResearchTool } from "./browserbase-tool";
+import { cfoAiFinancialTool } from "./cfo-ai-tool";
 
 let isTracingDisabled = false;
 
@@ -116,6 +117,11 @@ Browser Research Rules:
 - Browser research is read-only. Never use it to purchase, log in,
   upload files, download files, or modify external systems.
 
+Financial Modeling & CFO.ai Rules:
+- Use cfo_financial_analysis when asked about financial modeling, burn rate, cash runway, department expenses, or scenario forecasts.
+- Report runway in months, monthly burn rate, and cash balance clearly.
+- Distinguish between baseline actuals and forecast projections.
+
 Use only the available tools when needed.
 Do not claim that an action succeeded unless the tool result confirms it.
 Ask for confirmation before destructive or high-risk actions.
@@ -125,6 +131,6 @@ Ask for confirmation before destructive or high-risk actions.
         name: agentConfig.name,
         model: setupModel(overrideProvider, overrideModel),
         instructions,
-        tools: [...composioTools, browserbaseResearchTool]
+        tools: [...composioTools, browserbaseResearchTool, cfoAiFinancialTool]
     });
 }
