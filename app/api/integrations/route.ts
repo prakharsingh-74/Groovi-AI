@@ -5,22 +5,6 @@ import { currentUser } from '@clerk/nextjs/server';
 import { eq } from 'drizzle-orm';
 import { NextRequest, NextResponse } from 'next/server';
 
-export const OFFICIAL_TOOL_LOGOS: Record<string, string> = {
-    slack: "https://cdn.jsdelivr.net/gh/walkxcode/dashboard-icons/png/slack.png",
-    notion: "https://cdn.jsdelivr.net/gh/walkxcode/dashboard-icons/png/notion.png",
-    google_calendar: "https://cdn.jsdelivr.net/gh/walkxcode/dashboard-icons/png/google-calendar.png",
-    calendar: "https://cdn.jsdelivr.net/gh/walkxcode/dashboard-icons/png/google-calendar.png",
-    googlesheets: "https://cdn.jsdelivr.net/gh/walkxcode/dashboard-icons/png/google-sheets.png",
-    google_sheets: "https://cdn.jsdelivr.net/gh/walkxcode/dashboard-icons/png/google-sheets.png",
-    supabase: "https://cdn.jsdelivr.net/gh/walkxcode/dashboard-icons/png/supabase.png",
-    outlook: "https://cdn.jsdelivr.net/gh/walkxcode/dashboard-icons/png/microsoft-outlook.png",
-    gmail: "https://ik.imagekit.io/Tubeguruji/logos/gmail.webp",
-    github: "https://ik.imagekit.io/Tubeguruji/logos/github.svg",
-    browserbase: "https://ik.imagekit.io/Tubeguruji/logos/browserbase.png",
-    serp_search: "https://ik.imagekit.io/Tubeguruji/logos/serpapi.png",
-    web_search: "https://ik.imagekit.io/Tubeguruji/logos/web-link.png",
-};
-
 export async function GET(req: NextRequest) {
     const user = await currentUser();
     const userEmail = user?.primaryEmailAddress?.emailAddress || user?.emailAddresses?.[0]?.emailAddress;
@@ -32,7 +16,6 @@ export async function GET(req: NextRequest) {
         return NextResponse.json(
             toolsResult.map((tool) => ({
                 ...tool,
-                icon: OFFICIAL_TOOL_LOGOS[tool.slug.toLowerCase().trim()] || tool.icon,
                 account: null,
                 connected: 'Not connected',
             }))
@@ -69,7 +52,6 @@ export async function GET(req: NextRequest) {
 
         return {
             ...tool,
-            icon: OFFICIAL_TOOL_LOGOS[toolLower] || tool.icon,
             account: toolAccount ?? null,
             connected: isConnected ? 'Connected' : 'Not connected',
         };

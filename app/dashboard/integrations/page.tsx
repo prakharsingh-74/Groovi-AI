@@ -18,31 +18,14 @@ type ToolsType = {
     account?: { id: string; status: string } | null;
 };
 
-const OFFICIAL_TOOL_LOGOS: Record<string, string> = {
-    slack: "https://cdn.jsdelivr.net/gh/walkxcode/dashboard-icons/png/slack.png",
-    notion: "https://cdn.jsdelivr.net/gh/walkxcode/dashboard-icons/png/notion.png",
-    google_calendar: "https://cdn.jsdelivr.net/gh/walkxcode/dashboard-icons/png/google-calendar.png",
-    calendar: "https://cdn.jsdelivr.net/gh/walkxcode/dashboard-icons/png/google-calendar.png",
-    googlesheets: "https://cdn.jsdelivr.net/gh/walkxcode/dashboard-icons/png/google-sheets.png",
-    google_sheets: "https://cdn.jsdelivr.net/gh/walkxcode/dashboard-icons/png/google-sheets.png",
-    supabase: "https://cdn.jsdelivr.net/gh/walkxcode/dashboard-icons/png/supabase.png",
-    outlook: "https://cdn.jsdelivr.net/gh/walkxcode/dashboard-icons/png/microsoft-outlook.png",
-    gmail: "https://ik.imagekit.io/Tubeguruji/logos/gmail.webp",
-    github: "https://ik.imagekit.io/Tubeguruji/logos/github.svg",
-    browserbase: "https://ik.imagekit.io/Tubeguruji/logos/browserbase.png",
-    serp_search: "https://ik.imagekit.io/Tubeguruji/logos/serpapi.png",
-    web_search: "https://ik.imagekit.io/Tubeguruji/logos/web-link.png",
-};
-
 function ToolIcon({ slug, icon, name }: { slug: string; icon?: string; name: string }) {
     const [imgFailed, setImgFailed] = useState(false);
     const lower = (slug || "").toLowerCase();
-    const resolvedUrl = OFFICIAL_TOOL_LOGOS[lower] || icon;
 
-    if (resolvedUrl && !imgFailed) {
+    if (icon && !imgFailed) {
         return (
             <img
-                src={resolvedUrl}
+                src={icon}
                 alt={name}
                 width={36}
                 height={36}
