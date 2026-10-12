@@ -1,10 +1,22 @@
 import { CreatedAgentType } from "@/components/custom/agents/CreateAgent";
 import { getOrCreateAgentSession } from "./get-agent-composio-session";
-import { Agent, setTraceProcessors } from "@openai/agents";
+import { Agent, setTraceProcessors, tool } from "@openai/agents";
 import { setDefaultOpenAIClient, setOpenAIAPI } from "@openai/agents-openai";
 import OpenAI from "openai";
 import { browserbaseResearchTool } from "./browserbase-tool";
 import { cfoAiFinancialTool } from "./cfo-ai-tool";
+import { z } from "zod";
+
+export const composioSearchToolsFallback = tool({
+    name: "COMPOSIO_SEARCH_TOOLS",
+    description: "Fallback handler when agent attempts to search for tools dynamically.",
+    parameters: z.object({
+        query: z.string().optional().describe("Search query for tools"),
+    }),
+    execute: async ({ query }: { query?: string }) => {
+        return `No dynamic tools found for "${query || ''}". Please use browser_research to search the public web or use the already available tools.`;
+    },
+});
 
 let isTracingDisabled = false;
 
@@ -76,20 +88,8 @@ export function setupModel(overrideProvider?: string, overrideModel?: string): s
     throw new Error("No AI API key found. Please set GROQ_API_KEY or GOOGLE_CLOUD_GEMINI_API_KEY in your .env");
 }
 
-export async function buildAgent(
-    agentConfig: CreatedAgentType,
-    userEmail: string,
-    overrideProvider?: string,
-    overrideModel?: string
-) {
-    const session = await getOrCreateAgentSession(agentConfig, userEmail);
-    const rawTools = await session.tools();
-    // Cap tools to the primary 3 actions to prevent huge JSON schemas that hit token/rate limits
-    const composioTools = Array.isArray(rawTools) && rawTools.length > 3
-        ? rawTools.slice(0, 3)
-        : rawTools;
-
-    const instructions = `
+export function getAgentInstructions(agentConfig: CreatedAgentType): string {
+    return `
 Role: ${agentConfig?.description},
 
 Instructions:
@@ -122,15 +122,40 @@ Financial Modeling & CFO.ai Rules:
 - Report runway in months, monthly burn rate, and cash balance clearly.
 - Distinguish between baseline actuals and forecast projections.
 
-Use only the available tools when needed.
-Do not claim that an action succeeded unless the tool result confirms it.
-Ask for confirmation before destructive or high-risk actions.
+Tool Execution Rules:
+- Only call tools that are explicitly declared in your tools list.
+- If a requested platform (such as Reddit, Twitter, or external forums) does not have a dedicated tool, use browser_research to search the public web.
+- Never call undeclared meta-tools.
+- Do not claim that an action succeeded unless the tool result confirms it.
+- Ask for confirmation before destructive or high-risk actions.
 `.trim();
+}
+
+export async function buildAgent(
+    agentConfig: CreatedAgentType,
+    userEmail: string,
+    overrideProvider?: string,
+    overrideModel?: string,
+    cachedTools?: any[]
+) {
+    const instructions = getAgentInstructions(agentConfig);
+
+    let toolsToUse = cachedTools;
+    if (!toolsToUse || !Array.isArray(toolsToUse) || toolsToUse.length === 0) {
+        const session = await getOrCreateAgentSession(agentConfig, userEmail);
+        const rawTools = await session.tools();
+        // Cap tools to the primary 3 actions to prevent huge JSON schemas that hit token/rate limits
+        const composioTools = Array.isArray(rawTools) && rawTools.length > 3
+            ? rawTools.slice(0, 3)
+            : rawTools;
+
+        toolsToUse = [...composioTools, browserbaseResearchTool, cfoAiFinancialTool, composioSearchToolsFallback];
+    }
 
     return new Agent({
         name: agentConfig.name,
         model: setupModel(overrideProvider, overrideModel),
         instructions,
-        tools: [...composioTools, browserbaseResearchTool, cfoAiFinancialTool]
+        tools: toolsToUse
     });
 }
