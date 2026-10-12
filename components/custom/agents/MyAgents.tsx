@@ -1,12 +1,14 @@
 'use client'
 
-import React, { useState, useEffect, useCallback } from "react"
+import React, { useState, useEffect, useCallback, useContext } from "react"
 import axios from "axios"
+import { useRouter } from "next/navigation"
 import { CreatedAgentType } from "./CreateAgent"
 import AgentEditSheet from "./AgentEditSheet"
 import AgentChatDrawer from "./AgentChatDrawer"
 import { Button } from "@/components/ui/button"
 import { Skeleton } from "@/components/ui/skeleton"
+import { UserDetailContext } from "@/context/UserDetailContext"
 import {
     DropdownMenu,
     DropdownMenuContent,
@@ -37,10 +39,14 @@ import {
     Plus,
     RefreshCw,
     Loader2,
+    Crown,
+    AlertTriangle,
 } from "lucide-react"
 import { toast } from "@/components/ui/toast"
 
 function MyAgents() {
+    const router = useRouter()
+    const { userDetail, setUserDetail } = useContext(UserDetailContext)
     const [agents, setAgents] = useState<CreatedAgentType[]>([])
     const [loading, setLoading] = useState<boolean>(true)
     const [selectedEditAgent, setSelectedEditAgent] = useState<CreatedAgentType | null>(null)
@@ -128,6 +134,8 @@ function MyAgents() {
                 type: "success"
             })
             setAgentToDelete(null)
+            // Re-sync user detail to update sidebar count
+            axios.get('/api/users').then(res => res.data && setUserDetail(res.data)).catch(() => {})
         } catch (error) {
             console.error("Failed to delete agent:", error)
             toast.add({
@@ -201,6 +209,33 @@ function MyAgents() {
                     <RefreshCw className={`w-4 h-4 ${isRefreshing ? "animate-spin" : ""}`} />
                 </Button>
             </div>
+
+            {/* Free Tier Limit Banner */}
+            {!loading && (userDetail?.plan !== 'pro' && !userDetail?.isPro) && agents.length >= 3 && (
+                <div className="mb-6 p-4 rounded-2xl bg-amber-500/10 border border-amber-500/30 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                    <div className="flex items-center gap-3">
+                        <div className="w-10 h-10 rounded-xl bg-amber-500/20 text-amber-600 flex items-center justify-center shrink-0">
+                            <AlertTriangle className="w-5 h-5" />
+                        </div>
+                        <div>
+                            <h4 className="text-sm font-semibold text-amber-900 dark:text-amber-200">
+                                You have used the free tier of groovi ({agents.length}/3 agents created)
+                            </h4>
+                            <p className="text-xs text-amber-700 dark:text-amber-400 mt-0.5">
+                                Upgrade to Groovi Pro to create unlimited autonomous agents and access premium templates.
+                            </p>
+                        </div>
+                    </div>
+                    <Button
+                        onClick={() => router.push('/dashboard/billing')}
+                        size="sm"
+                        className="bg-amber-600 hover:bg-amber-700 text-white gap-1.5 shrink-0 cursor-pointer"
+                    >
+                        <Crown className="w-4 h-4" />
+                        Upgrade to Pro
+                    </Button>
+                </div>
+            )}
 
             {/* Loading Skeleton State */}
             {loading ? (

@@ -6,6 +6,7 @@ export const users = pgTable("users", {
   email: text("email").notNull().unique(),
   agentCredits: integer("agentCredits").default(3),
   usageCredits: integer("usageCredits").default(100),
+  plan: varchar("plan", { length: 50 }).default("free"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 
@@ -77,7 +78,7 @@ export const AgentRun = pgTable(
 
     agentId: varchar("agentId")
       .notNull()
-      .references(() => AgentConfig.agentId),
+      .references(() => AgentConfig.agentId, { onDelete: "cascade" }),
 
     userEmail: text("email").notNull(),
 

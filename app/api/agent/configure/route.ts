@@ -4,17 +4,54 @@ import OpenAI from "openai";
 import { AgentConfigSystemPrompt } from "@/data/Prompt";
 import { AgentConfigRespSchema } from "@/data/ResponseSchema";
 import { ensureNeatlogsInit, wrapGoogleGenAI, trace, flush } from "@/lib/neatlogs";
-import { AgentConfig, AgentRun, db, tools } from "@/db";
+import { AgentConfig, AgentRun, db, tools, users } from "@/db";
 import { currentUser } from "@clerk/nextjs/server";
-import { eq, desc, and } from "drizzle-orm";
+import { eq, desc, and, sql } from "drizzle-orm";
 import { calculateNextDailyRun } from "@/lib/agent-schedule";
+import { getUserSubscriptionPlan } from "@/lib/subscription";
 
 export async function POST(req: NextRequest) {
     const { prompt, timezone } = await req.json();
-    const user=await currentUser();
+    const user = await currentUser();
+    const userEmail = user?.primaryEmailAddress?.emailAddress;
+
+    if (!userEmail) {
+        return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
 
     if (!prompt || !prompt.trim()) {
         return NextResponse.json({ error: "Prompt is required" }, { status: 400 });
+    }
+
+    // Verify Free tier limit: max 3 agents
+    const userDb = await db.select().from(users).where(eq(users.email, userEmail)).limit(1);
+    let isPro = userDb[0]?.plan === "pro";
+
+    if (!isPro && user?.id) {
+        // Double-check Clerk billing subscription in case upgraded
+        const sub = await getUserSubscriptionPlan(user.id);
+        if (sub.isPro) {
+            isPro = true;
+            await db.update(users).set({ plan: "pro" }).where(eq(users.email, userEmail));
+        }
+    }
+
+    if (!isPro) {
+        const agentCountRes = await db.select({ count: sql<number>`count(*)` })
+            .from(AgentConfig)
+            .where(eq(AgentConfig.userEmail, userEmail));
+        const agentCount = Number(agentCountRes[0]?.count || 0);
+
+        if (agentCount >= 3) {
+            return NextResponse.json({
+                error: "You have used the free tier of groovi",
+                message: "You have reached the maximum limit of 3 agents on the free tier. Please upgrade to Groovi Pro to create unlimited agents.",
+                limitReached: true,
+                agentCount,
+                maxAgents: 3,
+                code: "FREE_TIER_LIMIT"
+            }, { status: 403 });
+        }
     }
 
     const apiKey = process.env.GOOGLE_CLOUD_GEMINI_API_KEY;
@@ -261,21 +298,40 @@ export async function GET(req: NextRequest) {
 }
 
 export async function DELETE(req: NextRequest) {
-    const { agentId } = await req.json().catch(() => ({
-        agentId: new URL(req.url).searchParams.get("agentId"),
-    }));
-
     try {
-        const deleteAgentConfig = await db.delete(AgentConfig)
-            .where(eq(AgentConfig.agentId, agentId));
+        let agentId: string | null = null;
 
-        const deleteAgentRun = await db.delete(AgentRun)
-            .where(and(eq(AgentRun.agentId, agentId), eq(AgentRun.status, 'scheduled')));
+        // Try extracting from query params first
+        const { searchParams } = new URL(req.url);
+        agentId = searchParams.get("agentId");
 
-        return NextResponse.json({ msg: 'Agent Deleted!' }, { status: 200 });
-    }
-    catch (e) {
-        return NextResponse.json({ error: 'Internal Server Error' }, { status: 500 });
+        // If not in query params, try request body
+        if (!agentId) {
+            const body = await req.json().catch(() => null);
+            agentId = body?.agentId || null;
+        }
+
+        if (!agentId) {
+            return NextResponse.json({ error: "agentId is required" }, { status: 400 });
+        }
+
+        // Delete all associated runs first (scheduled, failed, running, completed)
+        await db.delete(AgentRun)
+            .where(eq(AgentRun.agentId, agentId));
+
+        // Delete the agent configuration
+        const deletedAgent = await db.delete(AgentConfig)
+            .where(eq(AgentConfig.agentId, agentId))
+            .returning();
+
+        return NextResponse.json({ 
+            msg: 'Agent Deleted!', 
+            success: true, 
+            deleted: deletedAgent[0] || null 
+        }, { status: 200 });
+    } catch (e: any) {
+        console.error("Error in agent configure DELETE:", e);
+        return NextResponse.json({ error: String(e?.message || e) }, { status: 500 });
     }
 }
 

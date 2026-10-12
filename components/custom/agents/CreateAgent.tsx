@@ -1,11 +1,21 @@
 'use client'
 import { Button } from '@/components/ui/button'
 import axios from 'axios'
-import { ArrowUp, BriefcaseBusiness, DollarSign, Loader2, Loader2Icon, Mail, Plus, Search } from 'lucide-react'
-import React, { useEffect, useState } from 'react'
-import { useSearchParams } from 'next/navigation'
+import { ArrowUp, BriefcaseBusiness, DollarSign, Loader2, Loader2Icon, Mail, Plus, Search, Crown, Sparkles, AlertTriangle } from 'lucide-react'
+import React, { useContext, useEffect, useState } from 'react'
+import { useRouter, useSearchParams } from 'next/navigation'
 import AIAgentQuestions from './AIAgentQuestions'
 import NewAgentCard from './NewAgentCard'
+import { UserDetailContext } from '@/context/UserDetailContext'
+import {
+    AlertDialog,
+    AlertDialogAction,
+    AlertDialogContent,
+    AlertDialogDescription,
+    AlertDialogFooter,
+    AlertDialogHeader,
+    AlertDialogTitle,
+} from '@/components/ui/alert-dialog'
 
 const quickSuggestions = [
     {
@@ -123,11 +133,32 @@ export type ClarificationQuestion = {
 export type clarificationQuestion = ClarificationQuestion
 
 function CreateAgent() {
+    const router = useRouter();
     const searchParams = useSearchParams();
+    const { userDetail, setUserDetail } = useContext(UserDetailContext);
     const [prompt, setPrompt] = useState('')
     const [configResult, setConfigResult] = useState<AgentConfigResp | null>(null);
     const [createdAgent, setCreateadAgent] = useState<CreatedAgentType | null>(null);
     const [loading, setLoading] = useState(false);
+    const [showLimitModal, setShowLimitModal] = useState(false);
+    const [redirectCountdown, setRedirectCountdown] = useState(2);
+
+    const isPro = userDetail?.plan === 'pro' || userDetail?.isPro;
+    const agentCount = Number(userDetail?.agentCount || 0);
+
+    const triggerLimitModalAndRedirect = () => {
+        setShowLimitModal(true);
+        let count = 2;
+        setRedirectCountdown(count);
+        const timer = setInterval(() => {
+            count -= 1;
+            setRedirectCountdown(count);
+            if (count <= 0) {
+                clearInterval(timer);
+                router.push('/dashboard/billing');
+            }
+        }, 1000);
+    };
 
     useEffect(() => {
         const queryPrompt = searchParams.get('prompt');
@@ -141,6 +172,11 @@ function CreateAgent() {
     }
 
     const OnSubmit = async () => {
+        if (!isPro && agentCount >= 3) {
+            triggerLimitModalAndRedirect();
+            return;
+        }
+
         setLoading(true);
         const timezone = getBrowserTimezone();
         try {
@@ -159,15 +195,26 @@ function CreateAgent() {
                     status: 'active'
                 } : null);
                 setCreateadAgent(agentData);
+                // Refresh user detail to increment agent count
+                axios.get('/api/users').then(res => res.data && setUserDetail(res.data)).catch(() => {});
             }
-        } catch (error) {
+        } catch (error: any) {
             console.error("Failed to generate agent config:", error);
+            if (error.response?.data?.limitReached || error.response?.status === 403) {
+                triggerLimitModalAndRedirect();
+                return;
+            }
         } finally {
             setLoading(false);
         }
     }
 
     const onComplete = async (ans: any) => {
+        if (!isPro && agentCount >= 3) {
+            triggerLimitModalAndRedirect();
+            return;
+        }
+
         console.log("OnComplete", ans);
         setConfigResult(null);
         const updatedPrompt = prompt + "\n" + JSON.stringify(ans);
@@ -188,8 +235,14 @@ function CreateAgent() {
             } : null);
             setCreateadAgent(agentData);
             setLoading(false);
-        } catch (error) {
+            // Refresh user detail to increment agent count
+            axios.get('/api/users').then(res => res.data && setUserDetail(res.data)).catch(() => {});
+        } catch (error: any) {
             console.error("Failed to submit clarification answers:", error);
+            if (error.response?.data?.limitReached || error.response?.status === 403) {
+                triggerLimitModalAndRedirect();
+                return;
+            }
         } finally {
             setLoading(false);
         }
@@ -197,6 +250,33 @@ function CreateAgent() {
 
     return (
         <div className='mt-5'>
+            {/* Limit Banner if 3/3 agents used on Free tier */}
+            {!isPro && agentCount >= 3 && (
+                <div className="mb-5 p-4 rounded-2xl bg-amber-500/10 border border-amber-500/30 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                    <div className="flex items-center gap-3">
+                        <div className="w-10 h-10 rounded-xl bg-amber-500/20 text-amber-600 flex items-center justify-center shrink-0">
+                            <AlertTriangle className="w-5 h-5" />
+                        </div>
+                        <div>
+                            <h4 className="text-sm font-semibold text-amber-900 dark:text-amber-200">
+                                You have used the free tier of groovi ({agentCount}/3 agents created)
+                            </h4>
+                            <p className="text-xs text-amber-700 dark:text-amber-400 mt-0.5">
+                                Upgrade to Groovi Pro to create unlimited autonomous agents and access premium templates.
+                            </p>
+                        </div>
+                    </div>
+                    <Button
+                        onClick={() => router.push('/dashboard/billing')}
+                        size="sm"
+                        className="bg-amber-600 hover:bg-amber-700 text-white gap-1.5 shrink-0 cursor-pointer"
+                    >
+                        <Crown className="w-4 h-4" />
+                        Upgrade to Pro
+                    </Button>
+                </div>
+            )}
+
             <div>
                 <h2 className='text-2xl font-semibold tracking-tight'>Create New Agent</h2>
                 <p className='mt-1 text-sm text-muted-foreground'>Ask what type of agent you want to create, Type your goal, task or workflow </p>
@@ -273,6 +353,35 @@ function CreateAgent() {
                 </div>
             }
             {createdAgent && <NewAgentCard createdAgent={createdAgent} />}
+
+            {/* Free Tier Limit Reached Dialog */}
+            <AlertDialog open={showLimitModal} onOpenChange={setShowLimitModal}>
+                <AlertDialogContent className="max-w-md text-center p-6 sm:p-7">
+                    <AlertDialogHeader className="items-center text-center">
+                        <div className="w-14 h-14 rounded-2xl bg-amber-500/15 border border-amber-500/30 text-amber-600 flex items-center justify-center mb-2 mx-auto">
+                            <Crown className="w-7 h-7" />
+                        </div>
+                        <AlertDialogTitle className="text-xl font-bold">
+                            You have used the free tier of groovi
+                        </AlertDialogTitle>
+                        <AlertDialogDescription className="text-sm text-muted-foreground mt-2">
+                            You have created 3/3 agents allowed on the Free plan. Upgrade to Groovi Pro to unlock unlimited autonomous agents, premium templates, and priority execution.
+                        </AlertDialogDescription>
+                    </AlertDialogHeader>
+                    <div className="my-3 p-3 rounded-xl bg-muted/60 border text-xs text-muted-foreground">
+                        Redirecting to Billing in <span className="font-bold text-foreground">{redirectCountdown}s</span>...
+                    </div>
+                    <AlertDialogFooter className="sm:justify-center">
+                        <AlertDialogAction
+                            onClick={() => router.push('/dashboard/billing')}
+                            className="w-full bg-blue-600 hover:bg-blue-700 text-white font-medium py-2.5 rounded-xl gap-2 cursor-pointer"
+                        >
+                            <Crown className="w-4 h-4" />
+                            Go to Billing Now
+                        </AlertDialogAction>
+                    </AlertDialogFooter>
+                </AlertDialogContent>
+            </AlertDialog>
         </div>
     )
 }
