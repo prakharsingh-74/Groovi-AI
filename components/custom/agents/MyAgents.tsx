@@ -140,12 +140,37 @@ function MyAgents() {
     }
 
     // Run agent action
-    const handleRunAgent = (agent: CreatedAgentType) => {
-        toast.add({
-            title: `Executing ${agent.name}...`,
-            type: "success"
-        })
+    const runAgent = async (agent: CreatedAgentType) => {
+        try {
+            const result = await axios.post("/api/agent/run", {
+                agentConfig: agent,
+                agentId: agent?.agentId,
+                input: null, // Important to run Agent Immediately
+            })
+
+            console.log(result.data);
+            if (result.data.error){
+                toast.add({
+                    type: "error",
+                    title: result.data.error
+                })
+                return;
+            }
+
+            toast.add({
+                title: "Agent Running...",
+                type: "success",
+            })
+        } catch (error) {
+            console.error("Failed to run agent:", error)
+            toast.add({
+                title: "Failed to run agent",
+                type: "error",
+            })
+        }
     }
+
+    const handleRunAgent = runAgent
 
     // Chat with agent action
     const handleChatWithAgent = (agent: CreatedAgentType) => {
@@ -261,7 +286,7 @@ function MyAgents() {
                                             <DropdownMenuContent align="end" className="w-44 rounded-xl shadow-lg border-slate-200">
                                                 <DropdownMenuGroup>
                                                     <DropdownMenuItem
-                                                        onClick={() => handleRunAgent(agent)}
+                                                        onClick={() => runAgent(agent)}
                                                         className="gap-2 text-xs font-medium cursor-pointer"
                                                     >
                                                         <Play className="w-3.5 h-3.5 text-purple-600" />
@@ -333,7 +358,7 @@ function MyAgents() {
                                     <Button
                                         variant="outline"
                                         size="sm"
-                                        onClick={() => handleRunAgent(agent)}
+                                        onClick={() => runAgent(agent)}
                                         className="h-9 w-full text-xs font-semibold rounded-xl border border-slate-200 bg-white text-slate-700 hover:bg-slate-50 hover:text-slate-900 gap-1.5 cursor-pointer shadow-none transition-colors"
                                     >
                                         <Play className="w-3.5 h-3.5 fill-current" />

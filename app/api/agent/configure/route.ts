@@ -175,17 +175,17 @@ export async function POST(req: NextRequest) {
 export async function PUT(req: NextRequest) {
     try {
         const body = await req.json();
-        const rawAgent = body.data?.draftAgent || body.draftAgent || body;
+        const agentConfig = body.data?.draftAgent || body.draftAgent || body;
 
-        const agentId = rawAgent.agentId;
-        const id = rawAgent.id;
+        const agentId = agentConfig.agentId;
+        const id = agentConfig.id;
 
         if (!agentId && !id) {
             return NextResponse.json({ error: "agentId or id is required for update" }, { status: 400 });
         }
 
         // Exclude primary key id and immutable createdAt timestamp string
-        const { id: _id, createdAt: _createdAt, ...updateData } = rawAgent;
+        const { id: _id, createdAt: _createdAt, ...updateData } = agentConfig;
 
         const condition = agentId
             ? eq(AgentConfig.agentId, agentId)
@@ -200,7 +200,31 @@ export async function PUT(req: NextRequest) {
             return NextResponse.json({ error: "Agent not found" }, { status: 404 });
         }
 
-        console.log("Agent updated successfully:", result[0]?.name);
+        console.log(result[0]);
+
+        //Update the Agent Run
+        const deleteScheduledAgentRun = await db.delete(AgentRun)
+            .where(and(eq(AgentRun.agentId, agentConfig?.agentId), eq(AgentRun.status, 'scheduled')));
+
+        // Schedule Next / Run
+        if (agentConfig?.status == 'active' && agentConfig?.schedule?.time) {
+            const nextRun = calculateNextDailyRun({
+                time: agentConfig?.schedule.time,
+                timezone: agentConfig?.schedule.timezone || "UTC",
+            });
+
+            await db
+                .insert(AgentRun)
+                .values({
+                    agentId: agentConfig.agentId,
+                    userEmail: agentConfig.userEmail || result[0]?.userEmail || "",
+                    scheduledFor: nextRun,
+                    timezone: agentConfig?.schedule.timezone || "UTC",
+                    status: "scheduled",
+                })
+                .onConflictDoNothing();
+        }
+
         return NextResponse.json(result[0]);
     } catch (e: any) {
         console.error("Error in agent configure PUT:", e);
