@@ -257,16 +257,18 @@ If the objective mentions daily, recurring, schedule, or a time, treat it as con
             after: new Date(run.scheduledFor),
           });
 
-          await db
-            .insert(AgentRun)
-            .values({
-              agentId: run.agentId,
-              userEmail: run.userEmail,
-              scheduledFor: nextRun,
-              timezone,
-              status: "scheduled",
-            })
-            .onConflictDoNothing();
+          if (nextRun && !isNaN(nextRun.getTime())) {
+            await db
+              .insert(AgentRun)
+              .values({
+                agentId: run.agentId,
+                userEmail: run.userEmail,
+                scheduledFor: nextRun,
+                timezone,
+                status: "scheduled",
+              })
+              .onConflictDoNothing();
+          }
         });
       }
 

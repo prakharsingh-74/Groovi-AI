@@ -76,3 +76,88 @@ export async function POST(req: NextRequest) {
     }
 }
 
+export async function DELETE(req: NextRequest) {
+    try {
+        const { toolSlug, agentId, connectedAccountId } = await req.json();
+        const user = await currentUser();
+
+        if (!user) {
+            return NextResponse.json({ error: "Unauthorized User" }, { status: 401 });
+        }
+
+        if (!agentId || !toolSlug) {
+            return NextResponse.json({ error: "Missing toolSlug or agentId" }, { status: 400 });
+        }
+
+        const userEmail = user?.primaryEmailAddress?.emailAddress || user?.emailAddresses?.[0]?.emailAddress;
+        if (!userEmail) {
+            return NextResponse.json({ error: "User email not found" }, { status: 400 });
+        }
+
+        const lowerSlug = String(toolSlug).toLowerCase().trim();
+        const normalizedSlug = SLUG_ALIASES[lowerSlug] || lowerSlug;
+
+        // 1. If connectedAccountId is provided, delete it via composio
+        if (connectedAccountId) {
+            try {
+                await composio.connectedAccounts.delete(connectedAccountId);
+                console.log(`Successfully deleted connectedAccount ${connectedAccountId}`);
+            } catch (err: any) {
+                console.warn(`Failed to delete connected account ${connectedAccountId}:`, err?.message);
+            }
+        }
+
+        // 2. Also list and delete active connections for this user & toolkit
+        try {
+            const userAccounts = await composio.connectedAccounts.list({
+                userIds: [userEmail],
+                toolkitSlugs: [normalizedSlug],
+            });
+
+            if (userAccounts?.items && userAccounts.items.length > 0) {
+                for (const acc of userAccounts.items) {
+                    try {
+                        await composio.connectedAccounts.delete(acc.id);
+                        console.log(`Deleted active connectedAccount ${acc.id} for ${normalizedSlug}`);
+                    } catch (e: any) {
+                        console.warn(`Failed to delete account ${acc.id}:`, e?.message);
+                    }
+                }
+            }
+        } catch (listErr: any) {
+            console.warn("Could not list connected accounts to delete:", listErr?.message);
+        }
+
+        // 3. Update agent config in database
+        const agentRecords = await db
+            .select()
+            .from(AgentConfig)
+            .where(eq(AgentConfig.agentId, agentId));
+
+        if (agentRecords && agentRecords.length > 0) {
+            const rawTools: any[] = Array.isArray(agentRecords[0].tools) ? agentRecords[0].tools : [];
+            const updatedTools = rawTools.map((t: any) => {
+                const s = typeof t === "string" ? t : t?.slug || t?.name || "";
+                if (s.toLowerCase() === lowerSlug || s.toLowerCase() === normalizedSlug) {
+                    return typeof t === "string" ? t : { ...t, connected: false };
+                }
+                return t;
+            });
+            await db
+                .update(AgentConfig)
+                .set({ tools: updatedTools })
+                .where(eq(AgentConfig.agentId, agentId));
+        }
+
+        return NextResponse.json({
+            message: `Successfully disconnected ${toolSlug}`,
+            success: true
+        });
+    } catch (err: any) {
+        console.error("Error disconnecting tool:", err);
+        return NextResponse.json({
+            error: err?.message || "Failed to disconnect tool"
+        }, { status: 500 });
+    }
+}
+

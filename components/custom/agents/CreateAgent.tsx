@@ -1,12 +1,16 @@
 'use client'
 import { Button } from '@/components/ui/button'
 import axios from 'axios'
-import { ArrowUp, BriefcaseBusiness, Loader2, Loader2Icon, Mail, Plus, Search } from 'lucide-react'
+import { ArrowUp, BriefcaseBusiness, DollarSign, Loader2, Loader2Icon, Mail, Plus, Search } from 'lucide-react'
 import React, { useState } from 'react'
 import AIAgentQuestions from './AIAgentQuestions'
 import NewAgentCard from './NewAgentCard'
 
 const quickSuggestions = [
+    {
+        label: "AI CFO Briefing",
+        prompt: "Act as my AI CFO. Analyze our current burn rate and cash runway for the next 12 months, break down department expenses, and generate a concise executive financial health briefing."
+    },
     {
         label: "Find AI jobs",
         prompt: "Find the latest AI developer jobs posted this week that match my skills and summarize the best oppurtunities for me."
@@ -31,8 +35,19 @@ const quickSuggestions = [
 
 const templates = [
     {
+        title: "AI CFO & Financial Analyst",
+        description: "Monitors cash runway, calculates burn rate, and delivers executive financial health briefings.",
+        prompt: "Act as my AI CFO. Analyze our current burn rate and cash runway for the next 12 months, break down department expenses, and generate a concise executive financial health briefing.",
+        icon: DollarSign,
+        iconBg: "bg-emerald-100",
+        iconColor: "text-emerald-600",
+        border: "hover:border-emerald-300",
+        glow: "hover:border-emerald-300",
+    },
+    {
         title: "Find latest jobs",
         description: "Search the web for the latest jobs matching my profile",
+        prompt: "Find the latest AI developer jobs posted this week that match my skills and summarize the best oppurtunities for me.",
         icon: BriefcaseBusiness,
         iconBg: "bg-orange-100",
         iconColor: "text-orange-600",
@@ -42,6 +57,7 @@ const templates = [
     {
         title: "daily inbox summary",
         description: "Summarize important emails and highlight what ",
+        prompt: "check my inbox and summarize the most important email, especifically anything that requires my reply or attention.",
         icon: Mail,
         iconBg: "bg-blue-100",
         iconColor: "text-blue-600",
@@ -51,6 +67,7 @@ const templates = [
     {
         title: "Research a topic",
         description: "Search the web for the latest jobs matching my profile",
+        prompt: "research a topic across the web, compare multiple sources and give me a concise summary with the most important findings.",
         icon: Search,
         iconBg: "bg-purple-100",
         iconColor: "text-purple-600",
@@ -216,9 +233,13 @@ function CreateAgent() {
 
                 !configResult && <div className='mt-10'>
                     <h2 className='flex text-lg justify-between items-center font-semibold'>Get started <span className='text-sm font-medium'>view all</span></h2>
-                    <div className='grid grid-cols-1 gap-4 md:grid-cols-3 mt-3'>
+                    <div className='grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4 mt-3'>
                         {templates.map((template, index) => (
-                            <div key={index} className={`border rounded-2xl p-5 hover:cursor-pointer hover:shadow-lg ${template.border} ${template.glow}`}>
+                            <div 
+                                key={index} 
+                                onClick={() => setPrompt(template.prompt || template.description)}
+                                className={`border rounded-2xl p-5 hover:cursor-pointer hover:shadow-lg transition-all ${template.border} ${template.glow}`}
+                            >
                                 <template.icon className={`h-12 w-12 p-2 ${template.iconBg} ${template.iconColor} rounded-xl`} />
                                 <div className='mt-6'>
                                     <h2 className='font-semibold text-foreground'>{template.title}</h2>

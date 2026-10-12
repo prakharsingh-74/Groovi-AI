@@ -8,8 +8,9 @@ Groovi AI is a platform for creating, configuring, and managing autonomous AI ag
 
 - **Natural Language Agent Creation**: Describe what you want to achieve, and Groovi AI generates an executable agent specification (objective, skills, instructions, and tools).
 - **Interactive Clarification**: If a prompt is ambiguous or lacks critical details, the system asks targeted questions before finalizing the configuration.
-- **Tool & App Integrations**: Connects with services via Composio (Google Calendar, GitHub, Gmail, Slack, Notion, Google Sheets, Browserbase, SerpApi) and Entire.io for code repository intelligence.
+- **Tool & App Integrations**: Connects with services via Composio (Google Calendar, GitHub, Gmail, Slack, Notion, Google Sheets, SerpApi), Entire.io for code repository intelligence, and native project-level integrations (Browserbase for live web automation, cfo.ai for executive financial modeling).
 - **Agent Customization**: Fine-tune agent instructions, manage enabled tools, set recurring execution schedules, and configure output formats.
+- **Financial Intelligence (cfo.ai)**: Project-level server tool querying runway, burn rate, expense breakdown, and scenario comparisons via cfo.ai.
 - **Observability & Checkpoints**: Integrated with neatlogs for latency and multi-model fallback tracing, and Entire.io for git-linked checkpoints and codebase graph memory.
 
 ---

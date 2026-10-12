@@ -143,7 +143,7 @@ export async function POST(req: NextRequest) {
 
             console.log("firstRun", firstRun);
 
-            if (firstRun) {
+            if (firstRun && !isNaN(firstRun.getTime())) {
                 const runInsert = await db.insert(AgentRun)
                 .values({
                     agentId,
@@ -213,16 +213,18 @@ export async function PUT(req: NextRequest) {
                 timezone: agentConfig?.schedule.timezone || "UTC",
             });
 
-            await db
-                .insert(AgentRun)
-                .values({
-                    agentId: agentConfig.agentId,
-                    userEmail: agentConfig.userEmail || result[0]?.userEmail || "",
-                    scheduledFor: nextRun,
-                    timezone: agentConfig?.schedule.timezone || "UTC",
-                    status: "scheduled",
-                })
-                .onConflictDoNothing();
+            if (nextRun && !isNaN(nextRun.getTime())) {
+                await db
+                    .insert(AgentRun)
+                    .values({
+                        agentId: agentConfig.agentId,
+                        userEmail: agentConfig.userEmail || result[0]?.userEmail || "",
+                        scheduledFor: nextRun,
+                        timezone: agentConfig?.schedule.timezone || "UTC",
+                        status: "scheduled",
+                    })
+                    .onConflictDoNothing();
+            }
         }
 
         return NextResponse.json(result[0]);

@@ -50,6 +50,7 @@ export type EditableTool = {
     connected: boolean
     slug: string
     logo: string
+    connectedAccountId?: string | null
 }
 
 const HOURS = ["01", "02", "03", "04", "05", "06", "07", "08", "09", "10", "11", "12"]
@@ -774,6 +775,41 @@ function AgentEditSheet({
         }
     }
 
+    const disconnectTool = async (tool: EditableTool) => {
+        setConnectingSlug(tool.slug)
+        try {
+            const result = await axios.delete('/api/agent/tools/connect', {
+                data: {
+                    agentId: agentConfig?.agentId ?? '',
+                    toolSlug: tool.slug,
+                    connectedAccountId: tool.connectedAccountId
+                }
+            })
+            console.log("Disconnected tool:", result.data)
+
+            toast.add({
+                type: 'info',
+                title: `${tool.name} disconnected`
+            })
+
+            // Optimistically update tool status in UI
+            setTools((prev) =>
+                prev.map((t) => (t.slug === tool.slug ? { ...t, connected: false, connectedAccountId: null } : t))
+            )
+
+            // Re-fetch tools from server to verify synchronization
+            await GetTools()
+        } catch (error: any) {
+            console.error("Failed to disconnect tool:", error)
+            toast.add({
+                type: 'error',
+                title: error?.response?.data?.error || "Failed to disconnect tool"
+            })
+        } finally {
+            setConnectingSlug(null)
+        }
+    }
+
     return (
         <Sheet open={isSheetOpen} onOpenChange={handleOpenChange}>
             {trigger ? (
@@ -1111,7 +1147,13 @@ function AgentEditSheet({
                                 <div className="flex items-center gap-1.5">
                                     <Button
                                         type="button"
-                                        onClick={() => connectTool(tool.slug)}
+                                        onClick={() => {
+                                            if (tool.connected) {
+                                                disconnectTool(tool)
+                                            } else {
+                                                connectTool(tool.slug)
+                                            }
+                                        }}
                                         variant={
                                             tool.connected
                                                 ? "outline"
@@ -1123,7 +1165,7 @@ function AgentEditSheet({
                                         {connectingSlug === tool.slug ? (
                                             <>
                                                 <Loader2 className="w-3.5 h-3.5 animate-spin mr-1.5" />
-                                                Connecting...
+                                                {tool.connected ? "Disconnecting..." : "Connecting..."}
                                             </>
                                         ) : (
                                             tool.connected ? "Disconnect" : "Connect"
