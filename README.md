@@ -2,6 +2,8 @@
 
 > **Autonomous AI Workforce Execution Engine** — Configure, connect, and schedule multi-tool background agents across Gmail, Slack, GitHub, Sheets, and Notion with durable execution, zero drift, and full observability.
 
+- ### NOTE: Agent might get fail while creating response as the free API keys quota limit can be exceeded any time.
+
 [![Next.js](https://img.shields.io/badge/Next.js-16-black?style=flat&logo=next.js)](https://nextjs.org/)
 [![React](https://img.shields.io/badge/React-19-blue?style=flat&logo=react)](https://react.dev/)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5-blue?style=flat&logo=typescript)](https://www.typescriptlang.org/)
@@ -28,7 +30,6 @@
   - **Free Tier**: Up to 3 autonomous agents, standard execution queue, custom prompt builder, and live tool bindings.
   - **Pro Tier ($40/mo)**: Unlimited agents, full access to 8+ production templates, priority execution queue, and dedicated support.
 - **Deep LLM Observability (Neatlogs)**: Real-time telemetry tracking token consumption, model costs, step latencies, tool execution payloads, and multi-model fallbacks.
-- ### Agent might get fail while creating response as the free API keys has been used.
 
 ---
 
